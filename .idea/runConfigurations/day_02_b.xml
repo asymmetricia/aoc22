@@ -1,0 +1,10 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="day 02 b" type="GoApplicationRunConfiguration" factoryName="Go Application">
+    <module name="aoc21" />
+    <working_directory value="$PROJECT_DIR$/day02/b" />
+    <kind value="FILE" />
+    <directory value="$PROJECT_DIR$" />
+    <filePath value="$PROJECT_DIR$/day02/b/main.go" />
+    <method v="2" />
+  </configuration>
+</component>
