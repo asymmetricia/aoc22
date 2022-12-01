@@ -1,11 +1,15 @@
 package set
 
-import "sort"
+import (
+	"sort"
 
-type Set map[string]bool
+	"golang.org/x/exp/constraints"
+)
 
-func (a Set) Intersect(b Set) Set {
-	ret := Set{}
+type Set[K comparable] map[K]bool
+
+func (a Set[K]) Intersect(b Set[K]) Set[K] {
+	ret := Set[K]{}
 	for k := range a {
 		if b[k] {
 			ret[k] = true
@@ -14,16 +18,16 @@ func (a Set) Intersect(b Set) Set {
 	return ret
 }
 
-func (a Set) Copy() Set {
-	ret := Set{}
+func (a Set[K]) Copy() Set[K] {
+	ret := Set[K]{}
 	for k := range a {
 		ret[k] = true
 	}
 	return ret
 }
 
-func (a Set) Union(b Set) Set {
-	ret := Set{}
+func (a Set[K]) Union(b Set[K]) Set[K] {
+	ret := Set[K]{}
 	for k := range a {
 		ret[k] = true
 	}
@@ -33,19 +37,21 @@ func (a Set) Union(b Set) Set {
 	return ret
 }
 
-func (a Set) Items() []string {
-	var ret []string
+func Items[K constraints.Ordered](a Set[K]) []K {
+	var ret []K
 	for k := range a {
 		ret = append(ret, k)
 	}
 
 	// have to, otherwise map traversal is unstable
-	sort.Strings(ret)
+	sort.Slice(ret, func(i, j int) bool {
+		return ret[i] < ret[j]
+	})
 	return ret
 }
 
-func (a Set) Difference(b Set) Set {
-	ret := Set{}
+func (a Set[K]) Difference(b Set[K]) Set[K] {
+	ret := Set[K]{}
 	for k := range a {
 		if !b[k] {
 			ret[k] = true
@@ -54,11 +60,20 @@ func (a Set) Difference(b Set) Set {
 	return ret
 }
 
-// Item returns a "random" item from the set, or the blank string if there are
+// Item returns a "random" item from the set, or the zero value if there are
 // no items in the set.
-func (a Set) Item() string {
+func (a Set[K]) Item() K {
 	for s := range a {
 		return s
 	}
-	return ""
+	var zero K
+	return zero
+}
+
+func FromItems[K comparable](items []K) Set[K] {
+	s := Set[K]{}
+	for _, i := range items {
+		s[i] = true
+	}
+	return s
 }

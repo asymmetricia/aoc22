@@ -19,6 +19,7 @@ type Glyph struct {
 	Image         draw.Image
 	Top, Left     int
 	Width, Height int
+	Raw           [][]bool
 }
 
 var Glyphs = map[rune]Glyph{}
@@ -54,11 +55,13 @@ func init() {
 		rows = rows[1:]
 		g.Image = image.NewRGBA(image.Rect(0, 0, len(rows[0]), len(rows)))
 		draw.Draw(g.Image, g.Image.Bounds(), image.Transparent, image.Point{}, draw.Src)
+		g.Raw = make([][]bool, len(rows))
 		for y, row := range rows {
+			g.Raw[y] = make([]bool, len(row))
 			for x, pt := range row {
-				switch pt {
-				case '#':
+				if pt == '#' {
 					g.Image.Set(x, y, color.White)
+					g.Raw[y][x] = true
 				}
 			}
 		}

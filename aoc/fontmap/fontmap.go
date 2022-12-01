@@ -10,7 +10,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/asymmetricia/aoc21/aoc"
+	"github.com/asymmetricia/aoc22/aoc"
 )
 
 func main() {

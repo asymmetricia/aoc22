@@ -3,6 +3,7 @@ package aoc
 import (
 	"image"
 	"image/color"
+	"image/draw"
 	"image/gif"
 	"os"
 )
@@ -11,10 +12,34 @@ func Optimize(imgs []*image.Paletted) {
 	if len(imgs) < 2 {
 		return
 	}
-	accum := image.NewPaletted(imgs[0].Rect, imgs[0].Palette)
+
+	var x, y int
+	for _, img := range imgs {
+		ix := img.Rect.Dx()
+		iy := img.Rect.Dy()
+		if ix > x {
+			x = ix
+		}
+		if iy > y {
+			y = iy
+		}
+	}
+
+	for _, img := range imgs {
+		ix := img.Rect.Dx()
+		iy := img.Rect.Dy()
+		if ix != x || iy != y {
+			repl := image.NewPaletted(image.Rect(0, 0, x, y), img.Palette)
+			draw.Draw(repl, img.Rect, img, image.Point{}, draw.Over)
+			*img = *repl
+		}
+	}
+
+	accum := image.NewPaletted(image.Rect(0, 0, x, y), imgs[0].Palette)
 	copy(accum.Pix, imgs[0].Pix)
 
 	tr := imgs[0].Palette.Index(color.Transparent)
+
 	for _, img := range imgs[1:] {
 		for i, v := range img.Pix {
 			if v == accum.Pix[i] {

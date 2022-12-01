@@ -1,9 +1,9 @@
 <component name="ProjectRunConfigurationManager">
   <configuration default="false" name="day 24 a" type="GoApplicationRunConfiguration" factoryName="Go Application">
-    <module name="aoc21" />
+    <module name="aoc22" />
     <working_directory value="$PROJECT_DIR$/day24/a" />
     <kind value="PACKAGE" />
-    <package value="github.com/asymmetricia/aoc21/day24/a" />
+    <package value="github.com/asymmetricia/aoc22/day24/a" />
     <directory value="$PROJECT_DIR$" />
     <filePath value="$PROJECT_DIR$/day24/a/main.go" />
     <method v="2" />

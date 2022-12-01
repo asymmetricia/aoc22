@@ -1,8 +1,8 @@
 package term
 
 import (
-	"fmt"
 	"image/color"
+	"strconv"
 )
 
 func ClearLine() {
@@ -27,15 +27,27 @@ func ShowCursor() {
 }
 
 func ColorC(color color.Color) {
-	r, g, b, _ := color.RGBA()
-	Color(int(r>>8), int(g>>8), int(b>>8))
+	print(ScolorC(color))
 }
 
+func ScolorC(color color.Color) string {
+	r, g, b, _ := color.RGBA()
+	return Scolor(int(r>>8), int(g>>8), int(b>>8))
+}
 func Color(r, g, b int) {
 	print(Scolor(r, g, b))
 }
 func Scolor(r, g, b int) string {
-	return fmt.Sprint("\x1b[38;2;", r, ";", g, ";", b, "m")
+	ret := []byte{
+		'\x1b', '[', '3', '8', ';', '2', ';',
+	}
+	ret = append(ret, []byte(strconv.Itoa(r))...)
+	ret = append(ret, ';')
+	ret = append(ret, []byte(strconv.Itoa(g))...)
+	ret = append(ret, ';')
+	ret = append(ret, []byte(strconv.Itoa(b))...)
+	ret = append(ret, 'm')
+	return string(ret)
 }
 
 func ColorReset() {

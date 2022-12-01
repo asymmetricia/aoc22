@@ -3,7 +3,7 @@ package aoc
 import (
 	"math"
 
-	"github.com/asymmetricia/aoc21/coord"
+	"github.com/asymmetricia/aoc22/coord"
 )
 
 // AStarGraph finds the path from start to end along the grpah defined by edges

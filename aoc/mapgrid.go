@@ -8,7 +8,7 @@ import (
 	"math"
 	"strconv"
 
-	"github.com/asymmetricia/aoc21/coord"
+	"github.com/asymmetricia/aoc22/coord"
 )
 
 type MapGrid map[int]map[int]int
