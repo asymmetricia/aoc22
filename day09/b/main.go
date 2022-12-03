@@ -2,15 +2,14 @@ package main
 
 import (
 	"bytes"
+	"github.com/sirupsen/logrus"
 	"os"
 	"strings"
-
-	"github.com/sirupsen/logrus"
 )
 
 var log = logrus.StandardLogger()
 
-func solution(input []byte) int {
+func solution(name string, input []byte) int {
 	input = bytes.TrimSpace(input)
 	input = bytes.Replace(input, []byte("\r"), []byte(""), -1)
 	lines := strings.Split(strings.TrimSpace(string(input)), "\n")
@@ -20,9 +19,13 @@ func solution(input []byte) int {
 }
 
 func main() {
+	log.SetFormatter(&logrus.TextFormatter{
+		FullTimestamp:   true,
+		TimestampFormat: "2006-01-02T15:04:05",
+	})
 	test, err := os.ReadFile("test")
 	if err == nil {
-		log.Printf("test solution: %d", solution(test))
+		log.Printf("test solution: %d", solution("test", test))
 	} else {
 		log.Warningf("no test data present")
 	}
@@ -31,5 +34,5 @@ func main() {
 	if err != nil {
 		log.WithError(err).Fatal("could not read input")
 	}
-	log.Printf("input solution: %d", solution(input))
+	log.Printf("input solution: %d", solution("input", input))
 }
