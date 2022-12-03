@@ -2,6 +2,7 @@ package set
 
 import (
 	"sort"
+	"strings"
 
 	"golang.org/x/exp/constraints"
 )
@@ -76,4 +77,12 @@ func FromItems[K comparable](items []K) Set[K] {
 		s[i] = true
 	}
 	return s
+}
+
+func FromString(s string) Set[rune] {
+	return FromItems([]rune(s))
+}
+
+func FromWords(s string) Set[string] {
+	return FromItems(strings.Fields(s))
 }
