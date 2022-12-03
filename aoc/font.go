@@ -51,7 +51,47 @@ func init() {
 			g.Width = len(rows[1]) - x - g.Left
 		}
 
-		r, _ := utf8.DecodeRune(rows[0])
+		var glyphKey []byte
+		accum := make([]uint8, 0, 2)
+		var state int
+		for _, keyByte := range rows[0] {
+			switch state {
+			case 0:
+				if keyByte == '\\' {
+					state++
+					continue
+				}
+				glyphKey = append(glyphKey, keyByte)
+			case 1:
+				if keyByte == 'x' {
+					state++
+					continue
+				} else {
+					glyphKey = append(glyphKey, '\\', keyByte)
+					state = 0
+				}
+			case 2:
+				if keyByte >= '0' && keyByte <= '9' {
+					keyByte -= '0'
+				} else if keyByte >= 'a' && keyByte <= 'f' {
+					keyByte -= 'a' + 10
+				} else if keyByte >= 'A' && keyByte <= 'F' {
+					keyByte -= 'A' + 10
+				} else {
+					panic("expected hex digit, found " + string(keyByte))
+				}
+				accum = append(accum, keyByte)
+				if len(accum) == 2 {
+					glyphKey = append(glyphKey, accum[0]<<4|accum[1])
+				}
+			case 3:
+				accum[1] = keyByte
+			}
+		}
+		r, s := utf8.DecodeRune(glyphKey)
+		if r == '\000' || s == 0 {
+			r = ' '
+		}
 		rows = rows[1:]
 		g.Image = image.NewRGBA(image.Rect(0, 0, len(rows[0]), len(rows)))
 		draw.Draw(g.Image, g.Image.Bounds(), image.Transparent, image.Point{}, draw.Src)
@@ -74,8 +114,56 @@ type TypesetOpts struct {
 	Kern  bool
 }
 
+func TypesetBytes(line string, opts ...TypesetOpts) [][]byte {
+	opt := TypesetOpts{1, false}
+	if len(opts) > 0 {
+		opt = opts[0]
+	}
+
+	var ret [][]byte
+	cursorX := 0
+	y := 0
+	for _, g := range line {
+		if g == '\n' {
+			y++
+			cursorX = 0
+			continue
+		}
+		glyph, ok := Glyphs[g]
+		if !ok {
+			glyph = Glyphs['?']
+		}
+		for glyphY, glyphRow := range glyph.Raw {
+			canvasY := y*LineHeight*opt.Scale + glyphY*opt.Scale
+			for len(ret) < canvasY+opt.Scale {
+				ret = append(ret, nil)
+			}
+			for glyphX, bit := range glyphRow {
+				canvasX := cursorX*GlyphWidth*opt.Scale + glyphX*opt.Scale
+				for dy := 0; dy < opt.Scale; dy++ {
+					for len(ret[canvasY+dy]) < canvasX+opt.Scale {
+						ret[canvasY+dy] = append(ret[canvasY+dy], ' ')
+					}
+					if !bit {
+						continue
+					}
+					for dx := 0; dx < opt.Scale; dx++ {
+						ret[canvasY+dy][canvasX+dx] = '#'
+					}
+				}
+			}
+		}
+		cursorX++
+	}
+	return ret
+}
+
+func TypesetString(line string, opts ...TypesetOpts) string {
+	return string(bytes.Join(TypesetBytes(line, opts...), []byte{'\n'}))
+}
+
 // Typeset sets the given text on the image starting with the first glyph's (0,0)
-// pixel at cursor. It returns the number of pixels wide the text is.
+// pixel at cursor. It returns the number of pixel/s wide the text is.
 func Typeset(img draw.Image, cursor image.Point, line string, color color.Color, opts ...TypesetOpts) int {
 	left := cursor.X
 	right := cursor.X
