@@ -1,4 +1,4 @@
-package framebuffer
+package canvas
 
 import (
 	"image"
@@ -14,9 +14,10 @@ type Cell struct {
 	Value rune
 }
 
-type Framebuffer [][]Cell
+// A Canvas is a dense two-dimensional grid of Cells, where a Cell is a tuple of a color and a rune.
+type Canvas [][]Cell
 
-func (f *Framebuffer) Set(x, y int, value Cell) {
+func (f *Canvas) Set(x, y int, value Cell) {
 	for y >= len(*f) {
 		*f = append(*f, nil)
 	}
@@ -28,7 +29,7 @@ func (f *Framebuffer) Set(x, y int, value Cell) {
 	(*f)[y][x] = value
 }
 
-func (f *Framebuffer) PrintAt(x, y int, s string, c color.Color) {
+func (f *Canvas) PrintAt(x, y int, s string, c color.Color) {
 	i := 0
 	for _, char := range s {
 		if char == '\n' {
@@ -41,20 +42,25 @@ func (f *Framebuffer) PrintAt(x, y int, s string, c color.Color) {
 	}
 }
 
-func (f *Framebuffer) TypeSet(opts ...aoc.TypesetOpts) *image.Paletted {
-	return f.TypeSetRect(image.Rectangle{}, opts...)
+// Render creates a paletted image from the canvas using aoc.TypeSet.
+func (f *Canvas) Render(opts ...aoc.TypesetOpts) *image.Paletted {
+	return f.RenderRect(0, 0, opts...)
 }
 
-func (f *Framebuffer) TypeSetRect(minRect image.Rectangle, opts ...aoc.TypesetOpts) *image.Paletted {
+// RenderRect creates a paletted image from the canvas using aoc.TypeSet. The
+// resulting image will be large enough for at lest minWidth by minHeight glyphs.
+// The intent is to combine this with canvas.Bounds to render a stack of canvases
+// to the same size images.
+func (f *Canvas) RenderRect(minWidth int, minHeight int, opts ...aoc.TypesetOpts) *image.Paletted {
 	opt := aoc.TypesetOpts{Scale: 1}
 	if len(opts) > 0 {
 		opt = opts[0]
 	}
 
 	max := aoc.MaxFn(*f, func(c []Cell) int { return len(c) })
-	minWidth := minRect.Dx() * aoc.GlyphWidth * opt.Scale
+	minWidth *= aoc.GlyphWidth * opt.Scale
 	width := max * aoc.GlyphWidth * opt.Scale
-	minHeight := minRect.Dy() * aoc.LineHeight * opt.Scale
+	minHeight *= aoc.LineHeight * opt.Scale
 	height := len(*f) * aoc.LineHeight * opt.Scale
 	if minWidth > width {
 		width = minWidth
@@ -88,7 +94,7 @@ func (f *Framebuffer) TypeSetRect(minRect image.Rectangle, opts ...aoc.TypesetOp
 	return img
 }
 
-func (f *Framebuffer) String() string {
+func (f *Canvas) String() string {
 	var ret string
 	var c color.Color
 	var accum []rune
@@ -113,8 +119,8 @@ func (f *Framebuffer) String() string {
 	return ret
 }
 
-func (f *Framebuffer) Copy() Framebuffer {
-	var ret Framebuffer
+func (f *Canvas) Copy() Canvas {
+	var ret Canvas
 	ret = make([][]Cell, len(*f))
 	for i, row := range *f {
 		(ret)[i] = make([]Cell, len(row))
@@ -123,27 +129,27 @@ func (f *Framebuffer) Copy() Framebuffer {
 	return ret
 }
 
-func (f *Framebuffer) BlockPrintAt(x, y int, s string, c color.Color) {
+func (f *Canvas) BlockPrintAt(x, y int, s string, c color.Color) {
 	f.PrintAt(x, y, aoc.TypesetString(s), c)
 }
 
-func (f *Framebuffer) BlockSet(x, y int, value Cell) {
+func (f *Canvas) BlockSet(x, y int, value Cell) {
 	f.PrintAt(x, y, aoc.TypesetString(string(value.Value)), value.Color)
 }
 
-func (f *Framebuffer) Rect() image.Rectangle {
+func (f *Canvas) Rect() image.Rectangle {
 	x := aoc.MaxFn(*f, func(cs []Cell) int { return len(cs) })
 	return image.Rect(0, 0, x, len(*f))
 }
 
 type TextBox struct {
 	// If Middle is true, Top is ignored and the box is placed vertically in the
-	// middle of the existing framebuffer.
+	// middle of the existing canvas.
 	Top    int
 	Middle bool
 
 	// If Center is true, Left is ignored and the box is placed horizontally in the
-	// center of the existing framebuffer.
+	// center of the existing canvas.
 	Left   int
 	Center bool
 
@@ -172,7 +178,7 @@ type TextBox struct {
 	FooterColor color.Color
 }
 
-func (t TextBox) On(f *Framebuffer) {
+func (t TextBox) On(f *Canvas) {
 	if t.BodyBlock {
 		var blockBody string
 		for _, line := range strings.Split(string(t.Body), "\n") {
@@ -259,7 +265,7 @@ func (t TextBox) On(f *Framebuffer) {
 			padX = 1
 		}
 		for bodyX := 0; bodyX < bodyWidth; bodyX++ {
-			var r rune = ' '
+			var r = ' '
 			if bodyX < len(lineRunes) {
 				r = lineRunes[bodyX]
 			}
@@ -290,7 +296,7 @@ func (t TextBox) On(f *Framebuffer) {
 	t.Top++
 }
 
-func Rect(frames []*Framebuffer) image.Rectangle {
+func Bounds(frames []*Canvas) (int, int) {
 	x, y := 0, 0
 	for _, frame := range frames {
 		r := frame.Rect()
@@ -301,5 +307,5 @@ func Rect(frames []*Framebuffer) image.Rectangle {
 			y = r.Dy()
 		}
 	}
-	return image.Rect(0, 0, x, y)
+	return x, y
 }

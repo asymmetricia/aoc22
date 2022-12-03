@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"github.com/asymmetricia/aoc22/aoc"
-	"github.com/asymmetricia/aoc22/framebuffer"
+	"github.com/asymmetricia/aoc22/canvas"
 	"github.com/asymmetricia/aoc22/term"
 	"github.com/sirupsen/logrus"
 )
@@ -76,8 +76,8 @@ func (w World) Score() uint {
 	return ret
 }
 
-func frame(w World, o Outcome, t Throw, n int, total int, final bool) *framebuffer.Framebuffer {
-	var ret = &framebuffer.Framebuffer{}
+func frame(w World, o Outcome, t Throw, n int, total int, final bool) *canvas.Canvas {
+	var ret = &canvas.Canvas{}
 	for y, outcome := range []Outcome{Lose, Draw, Win} {
 		for x, throw := range []Throw{Rock, Paper, Scissors} {
 			frameColor := aoc.TolVibrantRed
@@ -94,7 +94,7 @@ func frame(w World, o Outcome, t Throw, n int, total int, final bool) *framebuff
 				bodyColor = aoc.TolVibrantCyan
 			}
 			amt := w[throw][outcome]
-			framebuffer.TextBox{
+			canvas.TextBox{
 				Top:        y * (aoc.LineHeight),
 				Left:       x * (aoc.GlyphWidth*3 + 2),
 				Title:      []rune(throw.String()),
@@ -108,7 +108,7 @@ func frame(w World, o Outcome, t Throw, n int, total int, final bool) *framebuff
 	}
 
 	if final {
-		framebuffer.TextBox{
+		canvas.TextBox{
 			Top:       3 * aoc.LineHeight,
 			Center:    true,
 			Title:     []rune("Final Score"),
@@ -116,14 +116,14 @@ func frame(w World, o Outcome, t Throw, n int, total int, final bool) *framebuff
 			BodyBlock: true,
 		}.On(ret)
 	} else {
-		framebuffer.TextBox{
+		canvas.TextBox{
 			Top:     3 * aoc.LineHeight,
 			Center:  true,
 			Footer:  []rune(fmt.Sprintf("game %d of %d", n, total)),
 			Body:    []rune(fmt.Sprintf("Throw %8s in order to %4s", t.String(), o.String())),
 			BodyPad: true,
 		}.On(ret)
-		framebuffer.TextBox{
+		canvas.TextBox{
 			Top:    3*aoc.LineHeight + 5,
 			Center: true,
 			Title:  []rune("Score"),
@@ -167,7 +167,7 @@ func solution(inputName string, input []byte) int {
 	var score int
 	world := World{}
 
-	var frames []*framebuffer.Framebuffer
+	var frames []*canvas.Canvas
 	for i, line := range lines {
 		outcome, throw := outcome(line)
 		world.Record(outcome, throw)
@@ -188,9 +188,9 @@ func solution(inputName string, input []byte) int {
 
 	anim := &gif.GIF{}
 	delay := 100
-	framesRect := framebuffer.Rect(frames)
+	framesWidth, framesHeight := canvas.Bounds(frames)
 	for i, frame := range frames {
-		anim.Image = append(anim.Image, frame.TypeSetRect(framesRect, aoc.TypesetOpts{Scale: 2}))
+		anim.Image = append(anim.Image, frame.RenderRect(framesWidth, framesHeight, aoc.TypesetOpts{Scale: 2}))
 		anim.Disposal = append(anim.Disposal, gif.DisposalNone)
 		anim.Delay = append(anim.Delay, delay)
 		delay = delay * 3 / 4

@@ -9,12 +9,12 @@ import (
 	"unicode/utf8"
 
 	"github.com/asymmetricia/aoc22/aoc"
-	"github.com/asymmetricia/aoc22/framebuffer"
+	"github.com/asymmetricia/aoc22/canvas"
 	"github.com/asymmetricia/aoc22/set"
 	"github.com/asymmetricia/aoc22/term"
 )
 
-func frame(elves [][]int, selected []int, totals []int, cursor int) framebuffer.Framebuffer {
+func frame(elves [][]int, selected []int, totals []int, cursor int) canvas.Canvas {
 	width := len(strconv.Itoa(aoc.MaxFn(elves, func(elf []int) int { return aoc.Max(elf...) })))
 	height := aoc.MaxFn(elves, func(elf []int) int { return len(elf) })
 	if len(totals) > 0 {
@@ -23,7 +23,7 @@ func frame(elves [][]int, selected []int, totals []int, cursor int) framebuffer.
 
 	selSet := set.FromItems(selected)
 
-	var ret framebuffer.Framebuffer
+	var ret canvas.Canvas
 	const bw = 4
 	x := bw - 1
 	y := 0
@@ -70,7 +70,7 @@ func main() {
 	}
 	lines := strings.Split(string(in), "\n")
 
-	var frames []framebuffer.Framebuffer
+	var frames []canvas.Canvas
 
 	var elves [][]int
 	var accum []int
@@ -152,7 +152,7 @@ func main() {
 
 	anim := &gif.GIF{}
 	for i, frame := range frames {
-		anim.Image = append(anim.Image, frame.TypeSet())
+		anim.Image = append(anim.Image, frame.Render())
 		anim.Delay = append(anim.Delay, 3)
 		anim.Disposal = append(anim.Disposal, gif.DisposalNone)
 		print("\r")

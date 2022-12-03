@@ -1,4 +1,4 @@
-package framebuffer
+package canvas
 
 import (
 	"strings"
@@ -34,7 +34,7 @@ func TestTextBox_On(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			fb := &Framebuffer{}
+			fb := &Canvas{}
 			tt.tb.On(fb)
 			got := fb.String()
 
