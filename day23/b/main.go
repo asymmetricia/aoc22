@@ -2,18 +2,25 @@ package main
 
 import (
 	"bytes"
-	"github.com/sirupsen/logrus"
 	"os"
 	"strings"
+	"unicode"
+
+	"github.com/sirupsen/logrus"
 )
 
 var log = logrus.StandardLogger()
 
 func solution(name string, input []byte) int {
-	input = bytes.TrimSpace(input)
+	// trim trailing space only
 	input = bytes.Replace(input, []byte("\r"), []byte(""), -1)
-	lines := strings.Split(strings.TrimSpace(string(input)), "\n")
-	log.Printf("read %d input lines", len(lines))
+	input = bytes.TrimRightFunc(input, unicode.IsSpace)
+	lines := strings.Split(strings.TrimRightFunc(string(input), unicode.IsSpace), "\n")
+	log.Printf("read %d %s lines", len(lines), name)
+
+	//for _, line := range lines {
+	//	//fields := strings.Fields(line)
+	//}
 
 	return -1
 }
