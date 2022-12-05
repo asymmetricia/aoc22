@@ -2,9 +2,12 @@ package main
 
 import (
 	"bytes"
-	"github.com/sirupsen/logrus"
 	"os"
 	"strings"
+
+	"github.com/sirupsen/logrus"
+
+	"github.com/asymmetricia/aoc22/aoc"
 )
 
 var log = logrus.StandardLogger()
@@ -15,7 +18,23 @@ func solution(name string, input []byte) int {
 	lines := strings.Split(strings.TrimSpace(string(input)), "\n")
 	log.Printf("read %d input lines", len(lines))
 
-	return -1
+	var overlaps int
+
+	for _, line := range lines {
+		pairs := strings.Split(line, ",")
+		s1, e1 := aoc.Split2(pairs[0], "-")
+		s1i, e1i := aoc.Int(s1), aoc.Int(e1)
+		s2, e2 := aoc.Split2(pairs[1], "-")
+		s2i, e2i := aoc.Int(s2), aoc.Int(e2)
+
+		if s2i >= s1i && s2i <= e1i ||
+			e2i >= s1i && e2i <= e1i ||
+			s2i <= s1i && e2i >= e1i {
+			overlaps++
+		}
+	}
+
+	return overlaps
 }
 
 func main() {
