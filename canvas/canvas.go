@@ -12,6 +12,7 @@ import (
 type Cell struct {
 	Color color.Color
 	Value rune
+	Font  aoc.Font
 }
 
 // A Canvas is a dense two-dimensional grid of Cells, where a Cell is a tuple of a color and a rune.
@@ -37,7 +38,7 @@ func (f *Canvas) PrintAt(x, y int, s string, c color.Color) {
 			y++
 			continue
 		}
-		f.Set(x+i, y, Cell{c, char})
+		f.Set(x+i, y, Cell{Color: c, Value: char})
 		i++
 	}
 }
@@ -72,6 +73,7 @@ func (f *Canvas) RenderRect(minWidth int, minHeight int, opts ...aoc.TypesetOpts
 	img := image.NewPaletted(image.Rect(0, 0, width, height), aoc.TolVibrant)
 	for y, row := range *f {
 		var c color.Color
+		var f aoc.Font
 		var accum []rune
 		var x int
 		for _, cell := range row {
@@ -79,15 +81,21 @@ func (f *Canvas) RenderRect(minWidth int, minHeight int, opts ...aoc.TypesetOpts
 				cell.Color = c
 				cell.Value = ' '
 			}
-			if c != nil && cell.Color != c && len(accum) > 0 {
+			if cell.Font == 0 {
+				cell.Font = aoc.Pixl
+			}
+			if (c != nil && cell.Color != c || f != 0 && cell.Font != f) && len(accum) > 0 {
+				opt.Font = f
 				aoc.Typeset(img, image.Pt(x*aoc.GlyphWidth*opt.Scale, y*aoc.LineHeight*opt.Scale), string(accum), c, opt)
 				x += len(accum)
 				accum = accum[0:0]
 			}
 			c = cell.Color
+			f = cell.Font
 			accum = append(accum, cell.Value)
 		}
 		if len(accum) > 0 && c != nil {
+			opt.Font = f
 			aoc.Typeset(img, image.Pt(x*aoc.GlyphWidth*opt.Scale, y*aoc.LineHeight*opt.Scale), string(accum), c, opt)
 		}
 	}
@@ -165,17 +173,25 @@ type TextBox struct {
 	Footer          []rune
 	FooterLeftAlign bool
 
-	// Defaults to aoc.TolVibrantGrey
+	// Defaults to aoc.TolVibrantGrey & aoc.Pixl
 	BodyColor color.Color
+	BodyFont  aoc.Font
 
-	// Defaults to same as BodyColor
+	// Defaults to same as Body
 	TitleColor color.Color
+	TitleFont  aoc.Font
 
-	// Defaults to same as BodyColor
+	// Defaults to same as Body
 	FrameColor color.Color
 
-	// Defaults to same as **TitleColor**
+	// Defaults to same as Title
 	FooterColor color.Color
+	FooterFont  aoc.Font
+
+	// If non-zero, number of characters wide & tall the content area will be. Body
+	// will be cropped if it exceeds this size, and aligns in the top-right if it is
+	// smaller.
+	Width, Height int
 }
 
 func (t TextBox) On(f *Canvas) {
@@ -188,11 +204,14 @@ func (t TextBox) On(f *Canvas) {
 			if blockBody != "" {
 				blockBody += "\n"
 			}
-			blockBody += aoc.TypesetString(line)
+			blockBody += aoc.TypesetString(line, aoc.TypesetOpts{Scale: 1, Font: t.BodyFont})
 		}
 		t.Body = []rune(blockBody)
 		t.BodyBlock = false
 		t.BodyPad = false
+		t.BodyFont = aoc.Pixl
+		t.Width *= aoc.GlyphWidth
+		t.Height *= aoc.LineHeight
 	}
 
 	// compute body size
@@ -205,6 +224,13 @@ func (t TextBox) On(f *Canvas) {
 			bodyWidth = len(line) + 2
 		}
 		bodyHeight++
+	}
+
+	if t.Width > 0 {
+		bodyWidth = t.Width
+	}
+	if t.Height > 0 {
+		bodyHeight = t.Height
 	}
 
 	if len(t.Title) > bodyWidth {
@@ -227,18 +253,30 @@ func (t TextBox) On(f *Canvas) {
 	if t.BodyColor == nil {
 		t.BodyColor = aoc.TolVibrantGrey
 	}
+	if t.BodyFont == 0 {
+		t.BodyFont = aoc.Pixl
+	}
+
 	if t.TitleColor == nil {
 		t.TitleColor = t.BodyColor
 	}
+	if t.TitleFont == 0 {
+		t.TitleFont = t.BodyFont
+	}
+
 	if t.FrameColor == nil {
 		t.FrameColor = t.BodyColor
 	}
+
 	if t.FooterColor == nil {
 		t.FooterColor = t.TitleColor
 	}
+	if t.FooterFont == 0 {
+		t.FooterFont = t.TitleFont
+	}
 
 	// Draw the title, aligned as per
-	f.Set(t.Left, t.Top, Cell{t.FrameColor, '┏'})
+	f.Set(t.Left, t.Top, Cell{t.FrameColor, '┏', aoc.Pixl})
 	titleStart := bodyWidth - len(t.Title)
 	titleEnd := bodyWidth
 	if !t.TitleRightAlign {
@@ -246,37 +284,41 @@ func (t TextBox) On(f *Canvas) {
 		titleEnd = len(t.Title)
 	}
 	for dy := 0; dy < titleStart; dy++ {
-		f.Set(t.Left+dy+1, t.Top, Cell{t.FrameColor, '━'})
+		f.Set(t.Left+dy+1, t.Top, Cell{t.FrameColor, '━', aoc.Pixl})
 	}
 	for dy := titleStart; dy < titleEnd; dy++ {
-		f.Set(t.Left+dy+1, t.Top, Cell{t.TitleColor, t.Title[dy-titleStart]})
+		f.Set(t.Left+dy+1, t.Top, Cell{t.TitleColor, t.Title[dy-titleStart], t.TitleFont})
 	}
 	for dy := titleEnd; dy < bodyWidth; dy++ {
-		f.Set(t.Left+dy+1, t.Top, Cell{t.FrameColor, '━'})
+		f.Set(t.Left+dy+1, t.Top, Cell{t.FrameColor, '━', aoc.Pixl})
 	}
-	f.Set(t.Left+bodyWidth+1, t.Top, Cell{t.FrameColor, '┓'})
+	f.Set(t.Left+bodyWidth+1, t.Top, Cell{t.FrameColor, '┓', aoc.Pixl})
 	t.Top++
 
-	for _, line := range strings.Split(string(t.Body), "\n") {
-		lineRunes := []rune(line)
-		f.Set(t.Left, t.Top, Cell{t.FrameColor, '┃'})
-		padX := 0
-		if t.BodyPad {
-			padX = 1
-		}
-		for bodyX := 0; bodyX < bodyWidth; bodyX++ {
-			var r = ' '
-			if bodyX < len(lineRunes) {
-				r = lineRunes[bodyX]
+	lines := strings.Split(string(t.Body), "\n")
+	for i := 0; i < bodyHeight; i++ {
+		f.Set(t.Left, t.Top, Cell{t.FrameColor, '┃', aoc.Pixl})
+
+		if i < len(lines) {
+			lineRunes := []rune(lines[i])
+			padX := 0
+			if t.BodyPad {
+				padX = 1
 			}
-			f.Set(t.Left+1+bodyX+padX, t.Top, Cell{t.BodyColor, r})
+			for bodyX := 0; bodyX < bodyWidth; bodyX++ {
+				var r = ' '
+				if bodyX < len(lineRunes) {
+					r = lineRunes[bodyX]
+				}
+				f.Set(t.Left+1+bodyX+padX, t.Top, Cell{t.BodyColor, r, t.BodyFont})
+			}
 		}
-		f.Set(t.Left+1+bodyWidth, t.Top, Cell{t.FrameColor, '┃'})
+		f.Set(t.Left+1+bodyWidth, t.Top, Cell{t.FrameColor, '┃', aoc.Pixl})
 		t.Top++
 	}
 
 	// Draw the footer, aligned as per
-	f.Set(t.Left, t.Top, Cell{t.FrameColor, '┗'})
+	f.Set(t.Left, t.Top, Cell{t.FrameColor, '┗', aoc.Pixl})
 	footerStart := bodyWidth - len(t.Footer)
 	footerEnd := bodyWidth
 	if t.FooterLeftAlign {
@@ -284,15 +326,15 @@ func (t TextBox) On(f *Canvas) {
 		footerEnd = len(t.Footer)
 	}
 	for dy := 0; dy < footerStart; dy++ {
-		f.Set(t.Left+dy+1, t.Top, Cell{t.FrameColor, '━'})
+		f.Set(t.Left+dy+1, t.Top, Cell{t.FrameColor, '━', aoc.Pixl})
 	}
 	for dy := footerStart; dy < footerEnd; dy++ {
-		f.Set(t.Left+dy+1, t.Top, Cell{t.FooterColor, t.Footer[dy-footerStart]})
+		f.Set(t.Left+dy+1, t.Top, Cell{t.FooterColor, t.Footer[dy-footerStart], t.FooterFont})
 	}
 	for dy := footerEnd; dy < bodyWidth; dy++ {
-		f.Set(t.Left+dy+1, t.Top, Cell{t.FrameColor, '━'})
+		f.Set(t.Left+dy+1, t.Top, Cell{t.FrameColor, '━', aoc.Pixl})
 	}
-	f.Set(t.Left+bodyWidth+1, t.Top, Cell{t.FrameColor, '┛'})
+	f.Set(t.Left+bodyWidth+1, t.Top, Cell{t.FrameColor, '┛', aoc.Pixl})
 	t.Top++
 }
 
