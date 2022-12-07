@@ -245,9 +245,15 @@ func (t TextBox) On(f *Canvas) {
 	fRect := f.Rect()
 	if t.Middle {
 		t.Top = fRect.Dy()/2 - (bodyHeight+2)/2
+		if t.Top <= 0 {
+			t.Top = 0
+		}
 	}
 	if t.Center {
 		t.Left = fRect.Dx()/2 - (bodyWidth+4)/2
+		if t.Left <= 0 {
+			t.Left = 0
+		}
 	}
 
 	if t.BodyColor == nil {
@@ -338,7 +344,7 @@ func (t TextBox) On(f *Canvas) {
 	t.Top++
 }
 
-func Bounds(frames []*Canvas) (int, int) {
+func Bounds(frames []*Canvas) (width int, height int) {
 	x, y := 0, 0
 	for _, frame := range frames {
 		r := frame.Rect()
