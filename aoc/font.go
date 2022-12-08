@@ -193,9 +193,12 @@ func Typeset(img draw.Image, cursor image.Point, line string, color color.Color,
 	left := cursor.X
 	right := cursor.X
 
-	opt := TypesetOpts{Scale: 1, Font: Pixl}
+	opt := TypesetOpts{Scale: 1}
 	if len(opts) > 0 {
 		opt = opts[0]
+	}
+	if opt.Font == 0 {
+		opt.Font = Pixl
 	}
 
 	initX := cursor.X
