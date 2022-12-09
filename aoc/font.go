@@ -233,3 +233,12 @@ func Typeset(img draw.Image, cursor image.Point, line string, color color.Color,
 
 	return right - left
 }
+
+const (
+	LineTL = '┏'
+	LineH  = '━'
+	LineTR = '┓'
+	LineV  = '┃'
+	LineBL = '┗'
+	LineBR = '┛'
+)

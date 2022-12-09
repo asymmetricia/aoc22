@@ -153,12 +153,16 @@ func (f *Canvas) Rect() image.Rectangle {
 type TextBox struct {
 	// If Middle is true, Top is ignored and the box is placed vertically in the
 	// middle of the existing canvas.
-	Top    int
+	Top int
+
+	// Place box vertically in the middle of the canvas.
 	Middle bool
 
 	// If Center is true, Left is ignored and the box is placed horizontally in the
 	// center of the existing canvas.
-	Left   int
+	Left int
+
+	// Place box horizontally in the center of the canvas.
 	Center bool
 
 	Title           []rune

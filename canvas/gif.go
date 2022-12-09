@@ -74,15 +74,12 @@ func RenderGif(canvases []*Canvas, csPerFrame map[int]float32, filename string, 
 		anim.Disposal = append(anim.Disposal, gif.DisposalNone)
 	}
 
-	lastImage := anim.Image[len(anim.Image)-1]
-	img := image.NewPaletted(lastImage.Rect, lastImage.Palette)
-	copy(img.Pix, lastImage.Pix)
-
-	anim.Image = append(anim.Image, lastImage)
+	anim.Image = append(anim.Image, canvases[len(canvases)-1].RenderRect(width, height))
 	anim.Delay = append(anim.Delay, anim.Delay[len(anim.Delay)-1])
 	anim.Disposal = append(anim.Disposal, gif.DisposalNone)
 
 	anim.Delay[len(anim.Delay)-2] = 500
 
 	aoc.SaveGIF(anim, filename, log)
+	log.Printf("rendered %d frames", len(canvases))
 }

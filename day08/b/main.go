@@ -2,8 +2,9 @@ package main
 
 import (
 	"bytes"
-	"image/color"
+	"fmt"
 	"math"
+	"math/rand"
 	"os"
 	"strconv"
 	"strings"
@@ -54,40 +55,231 @@ func visible(trees [][]int, x, y int) map[coord.Direction][]coord.Coord {
 	return ret
 }
 
-func frame(vis map[int]map[int]int, trees [][]int, x, y int, v map[coord.Direction][]coord.Coord, best coord.Coord) *canvas.Canvas {
+func frame(
+	state string,
+	trees [][]int,
+	visible map[int]map[int]bool,
+	cursorX int,
+	cursorY int,
+	bestX int,
+	bestY int,
+	bestScore int,
+) *canvas.Canvas {
 	ret := &canvas.Canvas{}
 
+	canvas.TextBox{
+		Title:  []rune("Dendrological Survey"),
+		Width:  99,
+		Height: 99,
+		Footer: []rune("DENDRO v1.2"),
+	}.On(ret)
+
+	canvas.TextBox{
+		Title: []rune("Status"),
+		Left:  101,
+		Width: 4 * aoc.GlyphWidth,
+		Body:  []rune("[ ] Loading\n[ ] Perimeter Scan\n[ ] Seeking Best Tree\n[ ] Done"),
+	}.On(ret)
+
+	switch state {
+	case "loading":
+		ret.PrintAt(103, 1, "X", aoc.TolVibrantOrange)
+		ret.PrintAt(106, 1, "Loading", aoc.TolVibrantOrange)
+	case "perimeter":
+		ret.PrintAt(103, 1, "✔", aoc.TolVibrantTeal)
+		ret.PrintAt(106, 1, "Loading", aoc.TolVibrantTeal)
+		ret.PrintAt(103, 2, "X", aoc.TolVibrantOrange)
+		ret.PrintAt(106, 2, "Perimeter Scan", aoc.TolVibrantOrange)
+	case "seeking":
+		ret.PrintAt(103, 1, "✔", aoc.TolVibrantTeal)
+		ret.PrintAt(106, 1, "Loading", aoc.TolVibrantTeal)
+		ret.PrintAt(103, 2, "✔", aoc.TolVibrantTeal)
+		ret.PrintAt(106, 2, "Perimeter Scan", aoc.TolVibrantTeal)
+		ret.PrintAt(103, 3, "X", aoc.TolVibrantOrange)
+		ret.PrintAt(106, 3, "Seeking Best Tree", aoc.TolVibrantOrange)
+	case "done":
+		ret.PrintAt(103, 1, "✔", aoc.TolVibrantTeal)
+		ret.PrintAt(106, 1, "Loading", aoc.TolVibrantTeal)
+		ret.PrintAt(103, 2, "✔", aoc.TolVibrantTeal)
+		ret.PrintAt(106, 2, "Perimeter Scan", aoc.TolVibrantTeal)
+		ret.PrintAt(103, 3, "✔", aoc.TolVibrantTeal)
+		ret.PrintAt(106, 3, "Seeking Best Tree", aoc.TolVibrantTeal)
+		ret.PrintAt(103, 4, "✔", aoc.TolVibrantTeal)
+		ret.PrintAt(106, 4, "Done", aoc.TolVibrantTeal)
+	}
+
+	visCount := 0
 	for yy, row := range trees {
 		for xx, height := range row {
-			var c color.Color = color.White
-			if yy < y || yy == y && xx < x {
-				c = aoc.TolVibrantGrey
+			c := aoc.TolVibrantGrey
+			if visible != nil {
+				if row, ok := visible[yy]; ok && row[xx] {
+					c = aoc.TolVibrantTeal
+					visCount++
+				}
 			}
-			if xx == x && yy == y {
-				c = aoc.TolVibrantOrange
-			}
-			ret.PrintAt(xx*2, yy, strconv.Itoa(height), c)
+			ret.PrintAt(xx+1, yy+1, strconv.Itoa(height), c)
 		}
 	}
 
-	for _, visibleTrees := range v {
-		for _, tree := range visibleTrees {
-			xx := tree.X
-			yy := tree.Y
-			ret.PrintAt(xx*2, yy, strconv.Itoa(trees[yy][xx]), aoc.TolVibrantCyan)
+	if cursorX > 0 && cursorY == -1 {
+		for y := 0; y < 99; y++ {
+			ret.PrintAt(cursorX+1, y+1, string(aoc.LineV), aoc.TolVibrantMagenta)
 		}
-	}
-
-	if best.Y > 0 && best.X > 0 {
+	} else if cursorX == -1 && cursorY > 0 {
+		for x := 0; x < 99; x++ {
+			ret.PrintAt(x+1, cursorY+1, string(aoc.LineH), aoc.TolVibrantMagenta)
+		}
+	} else if cursorX > 0 && cursorY > 0 {
 		canvas.TextBox{
-			Top:       best.Y - 1,
-			Left:      best.X*2 - 1,
-			Body:      []rune("+"),
+			Top:       cursorY,
+			Left:      cursorX,
+			Body:      []rune(fmt.Sprintf("%d", trees[cursorY][cursorX])),
 			BodyColor: aoc.TolVibrantRed,
 		}.On(ret)
 	}
 
+	vtColor := aoc.TolVibrantGrey
+	if state == "perimeter" {
+		vtColor = aoc.TolVibrantOrange
+	}
+	canvas.TextBox{
+		Top:        6,
+		Left:       101,
+		Title:      []rune("Visible Trees"),
+		Body:       []rune(fmt.Sprintf("%4d", visCount)),
+		BodyBlock:  true,
+		FrameColor: vtColor,
+	}.On(ret)
+
+	bestFrameColor := aoc.TolVibrantGrey
+	bestXDisp := " -- "
+	if bestX >= 0 {
+		bestFrameColor = aoc.TolVibrantOrange
+		bestXDisp = fmt.Sprintf(" %2d ", bestX)
+	}
+	canvas.TextBox{
+		Top:        6 + 2 + 8,
+		Left:       101,
+		Title:      []rune("Best Tree X"),
+		Body:       []rune(bestXDisp),
+		BodyBlock:  true,
+		FrameColor: bestFrameColor,
+	}.On(ret)
+
+	bestYDisp := " -- "
+	if bestY >= 0 {
+		bestYDisp = fmt.Sprintf(" %2d ", bestY)
+	}
+	canvas.TextBox{
+		Top:        6 + 2 + 8 + 2 + 8,
+		Left:       101,
+		Title:      []rune("Best Tree Y"),
+		Body:       []rune(bestYDisp),
+		BodyBlock:  true,
+		FrameColor: bestFrameColor,
+	}.On(ret)
+
+	bestScoreDisp := "------"
+	if bestScore >= 0 {
+		bestScoreDisp = fmt.Sprintf("%6d", bestScore)
+
+		canvas.TextBox{
+			Top:       bestY,
+			Left:      bestX,
+			Body:      []rune(fmt.Sprintf("%d", trees[bestY][bestX])),
+			BodyColor: aoc.TolVibrantCyan,
+		}.On(ret)
+	}
+
+	padding := (4*aoc.GlyphWidth - len(bestScoreDisp)) / 2
+	for i := 0; i < padding; i++ {
+		bestScoreDisp = " " + bestScoreDisp
+	}
+
+	canvas.TextBox{
+		Top:        6 + 2 + 8 + 2 + 8 + 2 + 8,
+		Left:       101,
+		Title:      []rune("Best Tree Score"),
+		Body:       []rune(bestScoreDisp),
+		Width:      4 * aoc.GlyphWidth,
+		FrameColor: bestFrameColor,
+	}.On(ret)
+
+	if state == "done" {
+		canvas.TextBox{
+			Top:        40,
+			Center:     true,
+			Title:      []rune("Best Tree Score"),
+			Body:       []rune(strings.TrimSpace(bestScoreDisp)),
+			BodyBlock:  true,
+			FrameColor: aoc.TolVibrantTeal,
+			TitleColor: aoc.TolVibrantMagenta,
+			BodyColor:  aoc.TolVibrantCyan,
+		}.On(ret)
+		canvas.TextBox{
+			Top:        50,
+			Center:     true,
+			Title:      []rune("Perimeter-Visible Tree Count"),
+			Body:       []rune(strconv.Itoa(visCount)),
+			BodyBlock:  true,
+			FrameColor: aoc.TolVibrantTeal,
+			TitleColor: aoc.TolVibrantMagenta,
+			BodyColor:  aoc.TolVibrantCyan,
+		}.On(ret)
+	}
+
 	return ret
+}
+
+func perimeterScan(trees [][]int) ([]*canvas.Canvas, map[int]map[int]bool) {
+	var ret []*canvas.Canvas
+	visible := map[int]map[int]bool{}
+	for y, row := range trees {
+		visible[y] = map[int]bool{}
+		visible[y][0] = true
+		last := row[0]
+		for x, height := range row {
+			if height > last {
+				last = height
+				visible[y][x] = true
+			}
+		}
+
+		visible[y][len(row)-1] = true
+		last = row[len(row)-1]
+		for x := len(row) - 1; x >= 0; x-- {
+			if row[x] > last {
+				last = row[x]
+				visible[y][x] = true
+			}
+		}
+
+		ret = append(ret, frame("perimeter", trees, visible, -1, y, -1, -1, -1))
+	}
+
+	for x := 0; x < len(trees[0]); x++ {
+		visible[0][x] = true
+		last := trees[0][x]
+		for y, row := range trees {
+			if row[x] > last {
+				last = row[x]
+				visible[y][x] = true
+			}
+		}
+
+		visible[len(trees)-1][x] = true
+		last = trees[len(trees)-1][x]
+		for y := len(trees) - 1; y >= 0; y-- {
+			if trees[y][x] > last {
+				last = trees[y][x]
+				visible[y][x] = true
+			}
+		}
+		ret = append(ret, frame("perimeter", trees, visible, x, -1, -1, -1, -1))
+	}
+
+	return ret, visible
 }
 
 func solution(name string, input []byte) int {
@@ -97,55 +289,49 @@ func solution(name string, input []byte) int {
 	lines := strings.Split(strings.TrimRightFunc(string(input), unicode.IsSpace), "\n")
 	log.Printf("read %d %s lines", len(lines), name)
 
+	var frames []*canvas.Canvas
+
 	trees := [][]int{}
 	for y, row := range lines {
 		trees = append(trees, make([]int, len(row)))
 		for x, height := range row {
 			trees[y][x] = int(height - '0')
 		}
+		frames = append(frames, frame("loading", trees, nil, -1, -1, -1, -1, -1))
 	}
 
-	framesMap := map[int]map[int]*canvas.Canvas{}
-	visibility := map[int]map[int]int{}
+	perimFrames, perimTrees := perimeterScan(trees)
+	frames = append(frames, perimFrames...)
 
 	var best coord.Coord
+	var bestScore int = math.MinInt
 	for y, row := range trees {
-		visibility[y] = map[int]int{}
-		framesRow := map[int]*canvas.Canvas{}
 		for x := range row {
 			visibleTrees := visible(trees, x, y)
 			score := len(visibleTrees[coord.North]) *
 				len(visibleTrees[coord.East]) *
 				len(visibleTrees[coord.South]) *
 				len(visibleTrees[coord.West])
-			visibility[y][x] = score
-			if score > visibility[best.Y][best.X] {
-				log.Print(score)
+			if score > bestScore {
 				best = coord.C(x, y)
+				bestScore = score
 			}
-			if x > 0 && x < len(row)-1 && y > 0 && y < len(trees)-1 {
-				framesRow[x] = frame(visibility, trees, x, y, visibleTrees, best)
+			if rand.Intn(20) == 0 {
+				frames = append(frames, frame("seeking", trees, perimTrees, x, y, best.X, best.Y, bestScore))
 			}
 		}
-		framesMap[y] = framesRow
 		if y%10 == 0 {
 			log.Printf("y=%d", y)
 		}
 	}
 
+	frames = append(frames, frame("done", trees, perimTrees, -1, -1, best.X, best.Y, bestScore))
+
 	log.Print("computation finished")
 
-	var frames []*canvas.Canvas
-	for y, row := range trees {
-		for x := range row {
-			if framesMap[y][x] != nil {
-				frames = append(frames, framesMap[y][x])
-			}
-		}
-	}
-	canvas.RenderGif(frames, map[int]float32{10: 50, 20: 25, 40: 12, 150: 3, 300: 1.0 / 2, math.MaxInt: 1.0 / 4}, "day08b-"+name+".gif", log)
+	canvas.RenderGif(frames, nil, "day08b-"+name+".gif", log)
 
-	return visibility[best.Y][best.X]
+	return bestScore
 }
 
 func main() {
