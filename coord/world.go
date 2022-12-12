@@ -8,6 +8,11 @@ import (
 
 type SparseWorld map[Coord]rune
 
+func (w SparseWorld) Find(r rune) []Coord {
+	//TODO implement me
+	panic("implement me")
+}
+
 func (w SparseWorld) Copy() World {
 	r := make(SparseWorld, len(w))
 	for c, obj := range w {
@@ -73,6 +78,18 @@ func (w SparseWorld) Each(f func(Coord) bool) {
 
 type DenseWorld [][]rune
 
+func (d DenseWorld) Find(r rune) []Coord {
+	var ret []Coord
+	for y, row := range d {
+		for x, rune := range row {
+			if rune == r {
+				ret = append(ret, C(x, y))
+			}
+		}
+	}
+	return ret
+}
+
 func (d DenseWorld) Copy() World {
 	r := make(DenseWorld, len(d))
 	for i, row := range d {
@@ -99,10 +116,10 @@ func (d DenseWorld) Print() {
 }
 
 func (d DenseWorld) At(coord Coord) rune {
-	if len(d) <= coord.Y {
+	if len(d) <= coord.Y || coord.Y < 0 {
 		return -1
 	}
-	if len(d[coord.Y]) <= coord.X {
+	if len(d[coord.Y]) <= coord.X || coord.X < 0 {
 		return -1
 	}
 	return d[coord.Y][coord.X]
@@ -137,6 +154,7 @@ type World interface {
 	Each(func(Coord) (stop bool))
 	Rect() (minX, minY, maxX, maxY int)
 	Copy() World
+	Find(rune) []Coord
 }
 
 var _ World = (*SparseWorld)(nil)

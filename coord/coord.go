@@ -2,12 +2,32 @@ package coord
 
 import (
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 )
 
 type Coord struct {
 	X, Y int
+}
+
+// Distance returns the pythagorean distance. This is relatively slow to compute.
+func (c Coord) Distance(d Coord) float64 {
+	return math.Sqrt(math.Pow(float64(c.X-d.X), 2) + math.Pow(float64(c.Y-d.Y), 2))
+}
+
+// TaxiDistance returns the taxi / manhattan distance (i.e., absolute difference
+// in X values plus absolute difference in Y values). It's quite fast to compute.
+func (c Coord) TaxiDistance(d Coord) int {
+	dx := c.X - d.X
+	dy := c.Y - d.Y
+	if dx < 0 {
+		dx = -dx
+	}
+	if dy < 0 {
+		dy = -dy
+	}
+	return dx + dy
 }
 
 func (c Coord) String() string {
