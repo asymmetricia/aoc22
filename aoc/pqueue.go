@@ -1,6 +1,9 @@
 package aoc
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 type PQueue[Node any] struct {
 	Head *PQueueNode[Node]
@@ -12,6 +15,15 @@ type PQueueNode[Node any] struct {
 	Next     *PQueueNode[Node]
 }
 
+func (pq *PQueue[Node]) String() string {
+	var ret strings.Builder
+	cursor := pq.Head
+	for cursor != nil {
+		ret.WriteString(fmt.Sprintf("%v=%d, ", cursor.Node, cursor.Priority))
+		cursor = cursor.Next
+	}
+	return ret.String()
+}
 func (pq *PQueue[Node]) Print() {
 	cursor := pq.Head
 	for cursor != nil {
