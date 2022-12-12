@@ -4,6 +4,7 @@ import (
 	"math"
 
 	"github.com/asymmetricia/aoc22/coord"
+	"github.com/asymmetricia/aoc22/set"
 )
 
 // AStarGraph finds the path from start to end along the grpah defined by edges
@@ -14,7 +15,7 @@ import (
 // picked from the open set.
 func AStarGraph[Cell comparable](
 	start Cell,
-	end Cell,
+	goal set.Set[Cell],
 	neighbors func(a Cell) []Cell,
 	cost func(a, b Cell) int,
 	heuristic func(a Cell) int,
@@ -27,13 +28,17 @@ func AStarGraph[Cell comparable](
 ) []Cell {
 	openSet := map[Cell]bool{start: true}
 	cameFrom := map[Cell]Cell{}
-	gScore := map[Cell]int{}
-	fScore := map[Cell]int{
+	gScore := map[Cell]int{
 		start: 0,
 	}
+	fScore := map[Cell]int{
+		start: heuristic(start),
+	}
 
+	found := false
+
+	var current Cell
 	for len(openSet) > 0 {
-		var current Cell
 		var curFscore = math.MaxInt
 		first := true
 
@@ -54,13 +59,15 @@ func AStarGraph[Cell comparable](
 			cb(openSet, cameFrom, gScore, fScore, current)
 		}
 
-		if current == end {
+		if goal[current] {
+			found = true
 			break
 		}
 
 		delete(openSet, current)
 
-		for _, neighbor := range neighbors(current) {
+		neighborList := neighbors(current)
+		for _, neighbor := range neighborList {
 			curGS, ok := gScore[current]
 			if !ok {
 				curGS = math.MaxInt
@@ -68,7 +75,7 @@ func AStarGraph[Cell comparable](
 
 			neighGS, ok := gScore[neighbor]
 			if !ok {
-				neighGS = math.MaxInt32
+				neighGS = math.MaxInt
 			}
 
 			tentativeGScore := curGS + cost(current, neighbor)
@@ -81,8 +88,12 @@ func AStarGraph[Cell comparable](
 		}
 	}
 
-	ret := []Cell{end}
-	cursor := end
+	if !found {
+		return nil
+	}
+
+	ret := []Cell{current}
+	cursor := current
 	for {
 		if cursor == start {
 			break
@@ -100,7 +111,7 @@ func AStarGraph[Cell comparable](
 func AStarGrid[Cell any](
 	grid map[coord.Coord]Cell,
 	start coord.Coord,
-	end coord.Coord,
+	goal set.Set[coord.Coord],
 	cost func(from, to coord.Coord) int,
 	heuristic func(from coord.Coord) int,
 	diag bool,
@@ -111,7 +122,7 @@ func AStarGrid[Cell any](
 		fScore map[coord.Coord]int,
 		current coord.Coord,
 	)) []coord.Coord {
-	return AStarGraph(start, end,
+	return AStarGraph(start, goal,
 		func(a coord.Coord) []coord.Coord {
 			var ret []coord.Coord
 			for _, n := range a.Neighbors(diag) {
