@@ -16,18 +16,21 @@ type Cell struct {
 }
 
 // A Canvas is a dense two-dimensional grid of Cells, where a Cell is a tuple of a color and a rune.
-type Canvas [][]Cell
+type Canvas struct {
+	Timing float32
+	Pix    [][]Cell
+}
 
 func (f *Canvas) Set(x, y int, value Cell) {
-	for y >= len(*f) {
-		*f = append(*f, nil)
+	for y >= len(f.Pix) {
+		f.Pix = append(f.Pix, nil)
 	}
-	if x >= len((*f)[y]) {
+	if x >= len(f.Pix[y]) {
 		row := make([]Cell, x+1)
-		copy(row, (*f)[y])
-		(*f)[y] = row
+		copy(row, f.Pix[y])
+		f.Pix[y] = row
 	}
-	(*f)[y][x] = value
+	f.Pix[y][x] = value
 }
 
 func (f *Canvas) PrintAt(x, y int, s string, c color.Color) {
@@ -58,11 +61,11 @@ func (f *Canvas) RenderRect(minWidth int, minHeight int, opts ...aoc.TypesetOpts
 		opt = opts[0]
 	}
 
-	max := aoc.MaxFn(*f, func(c []Cell) int { return len(c) })
+	max := aoc.MaxFn(f.Pix, func(c []Cell) int { return len(c) })
 	minWidth *= aoc.GlyphWidth * opt.Scale
 	width := max * aoc.GlyphWidth * opt.Scale
 	minHeight *= aoc.LineHeight * opt.Scale
-	height := len(*f) * aoc.LineHeight * opt.Scale
+	height := len(f.Pix) * aoc.LineHeight * opt.Scale
 	if minWidth > width {
 		width = minWidth
 	}
@@ -71,7 +74,7 @@ func (f *Canvas) RenderRect(minWidth int, minHeight int, opts ...aoc.TypesetOpts
 	}
 
 	img := image.NewPaletted(image.Rect(0, 0, width, height), aoc.TolVibrant)
-	for y, row := range *f {
+	for y, row := range f.Pix {
 		var c color.Color
 		var f aoc.Font
 		var accum []rune
@@ -106,7 +109,7 @@ func (f *Canvas) String() string {
 	var ret string
 	var c color.Color
 	var accum []rune
-	for _, row := range *f {
+	for _, row := range f.Pix {
 		for _, cell := range row {
 			if cell.Color == nil {
 				cell.Color = c
@@ -127,13 +130,15 @@ func (f *Canvas) String() string {
 	return ret
 }
 
-func (f *Canvas) Copy() Canvas {
-	var ret Canvas
-	ret = make([][]Cell, len(*f))
-	for i, row := range *f {
-		(ret)[i] = make([]Cell, len(row))
-		copy((ret)[i], (*f)[i])
+func (f *Canvas) Copy() *Canvas {
+	ret := &Canvas{}
+	ret.Pix = make([][]Cell, len(f.Pix))
+	for i, row := range f.Pix {
+		ret.Pix[i] = make([]Cell, len(row))
+		copy(ret.Pix[i], f.Pix[i])
 	}
+
+	ret.Timing = f.Timing
 	return ret
 }
 
@@ -146,8 +151,8 @@ func (f *Canvas) BlockSet(x, y int, value Cell) {
 }
 
 func (f *Canvas) Rect() image.Rectangle {
-	x := aoc.MaxFn(*f, func(cs []Cell) int { return len(cs) })
-	return image.Rect(0, 0, x, len(*f))
+	x := aoc.MaxFn(f.Pix, func(cs []Cell) int { return len(cs) })
+	return image.Rect(0, 0, x, len(f.Pix))
 }
 
 type TextBox struct {

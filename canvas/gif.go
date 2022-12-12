@@ -3,7 +3,6 @@ package canvas
 import (
 	"image"
 	"image/gif"
-	"math"
 	"sync"
 
 	"github.com/sirupsen/logrus"
@@ -11,24 +10,10 @@ import (
 	"github.com/asymmetricia/aoc22/aoc"
 )
 
-func timing(n int, csPerFrame map[int]float32) float32 {
-	// the best timing is the timing T such that there is no timing less than T and greater than N.
-	best := math.MaxInt
-	for t := range csPerFrame {
-		if t > n && t < best {
-			best = t
-		}
-	}
+const DefaultFrameTiming = 2
 
-	v, ok := csPerFrame[best]
-	if !ok {
-		return 3
-	}
-
-	return v
-}
-
-func RenderGif(canvases []*Canvas, csPerFrame map[int]float32, filename string, log logrus.FieldLogger) {
+// RenderGif creates a GIF from the stack of canvases. (TODO: motion blending?)
+func RenderGif(canvases []*Canvas, filename string, log logrus.FieldLogger) {
 	width, height := Bounds(canvases)
 	anim := &gif.GIF{}
 
@@ -41,15 +26,15 @@ func RenderGif(canvases []*Canvas, csPerFrame map[int]float32, filename string, 
 	wg := &sync.WaitGroup{}
 
 	for i, canvas := range canvases {
-		var frameTiming float32 = 3
-		if csPerFrame != nil {
-			frameTiming = timing(i, csPerFrame)
-			if frameTiming < 1 {
-				if i%(int(1.0/frameTiming)) != 0 && i != len(canvases)-1 {
-					continue
-				}
-				frameTiming = 3
+		var frameTiming float32 = DefaultFrameTiming
+		if canvas.Timing != 0 {
+			frameTiming = canvas.Timing
+		}
+		if frameTiming < DefaultFrameTiming {
+			if i%(int(1.0/frameTiming/float32(DefaultFrameTiming))) != 0 && i != len(canvases)-1 {
+				continue
 			}
+			frameTiming = DefaultFrameTiming
 		}
 
 		wg.Add(1)
