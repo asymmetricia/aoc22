@@ -37,9 +37,6 @@ func main() {
 		log.Warningf("no test data present")
 	}
 
-	input, err := os.ReadFile("input")
-	if err != nil {
-		log.WithError(err).Fatal("could not read input")
-	}
+	input := aoc.Input(2022, 18)
 	log.Printf("input solution: %d", solution("input", input))
 }
