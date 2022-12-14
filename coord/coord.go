@@ -113,16 +113,16 @@ func (c Coord) West() Coord {
 	return Coord{c.X - 1, c.Y}
 }
 func (c Coord) NorthEast() Coord {
-	return Coord{c.X + 1, c.Y + 1}
-}
-func (c Coord) SouthEast() Coord {
 	return Coord{c.X + 1, c.Y - 1}
 }
+func (c Coord) SouthEast() Coord {
+	return Coord{c.X + 1, c.Y + 1}
+}
 func (c Coord) NorthWest() Coord {
-	return Coord{c.X - 1, c.Y + 1}
+	return Coord{c.X - 1, c.Y - 1}
 }
 func (c Coord) SouthWest() Coord {
-	return Coord{c.X - 1, c.Y - 1}
+	return Coord{c.X - 1, c.Y + 1}
 }
 
 func (c Coord) Execute(steps []string) Coord {
@@ -141,4 +141,8 @@ func (c Coord) Plus(a Coord) Coord {
 }
 func (c Coord) Equal(a Coord) bool {
 	return c.X == a.X && c.Y == a.Y
+}
+
+func (c Coord) Minus(a Coord) Coord {
+	return Coord{c.X - a.X, c.Y - a.Y}
 }
