@@ -169,9 +169,9 @@ func solution(name string, input []byte) int {
 		}(i, world)
 	}
 
-	anim.Delay[len(anim.Delay)-2] = 500
-
 	wg.Wait()
+
+	anim.Delay[len(anim.Delay)-2] = 500
 
 	aoc.SaveGIF(anim, "day14-"+name+"-b.gif", log)
 
