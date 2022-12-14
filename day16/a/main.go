@@ -7,6 +7,8 @@ import (
 	"unicode"
 
 	"github.com/sirupsen/logrus"
+
+	"github.com/asymmetricia/aoc22/aoc"
 )
 
 var log = logrus.StandardLogger()
