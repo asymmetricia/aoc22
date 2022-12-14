@@ -7,6 +7,7 @@ import (
 	"image/draw"
 	"image/gif"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -62,52 +63,52 @@ func solution(name string, input []byte) int {
 
 	y := len(*world) + 1
 
-	particles := 0
-	pos := sandStart
 	var worlds []*coord.DenseWorld
+	particles := 0
 	for {
-		shouldPath := pos != sandStart && particles%5 == 0 && particles < 100
-		if pos.South().Y < y {
-			if world.At(pos.South()) == 0 {
-				if shouldPath {
-					world.Set(pos, 0)
-					world.Set(pos.South(), '+')
-					worlds = append(worlds, world.Crop())
-				}
-				pos = pos.South()
-				continue
-			}
-			if world.At(pos.SouthWest()) == 0 {
-				if shouldPath {
-					world.Set(pos, 0)
-					world.Set(pos.SouthWest(), '+')
-					worlds = append(worlds, world.Crop())
-				}
-				pos = pos.SouthWest()
-				continue
-			}
-			if world.At(pos.SouthEast()) == 0 {
-				if shouldPath {
-					world.Set(pos, 0)
-					world.Set(pos.SouthEast(), '+')
-					worlds = append(worlds, world.Crop())
-				}
-				pos = pos.SouthEast()
-				continue
-			}
-		}
-		if world.At(pos) == 'v' {
+		moved := false
+
+		if world.At(sandStart) == 'V' {
+			moved = true
+			world.Set(sandStart, 'v')
+		} else if world.At(sandStart) == 'v' {
 			particles++
-			break
+			moved = true
+			world.Set(sandStart, '-')
 		}
-		world.Set(pos, '+')
-		particles++
-		pos = sandStart
-		// show 10% of frames below particle 2k & 2% of frames above
-		if particles < 2000 && particles%10 == 0 ||
-			particles%50 == 0 ||
-			name == "test" {
+
+		for _, minus := range world.Find('-') {
+			world.Set(minus, '+')
+		}
+
+		sands := world.Find('+')
+		sort.Slice(sands, func(i, j int) bool {
+			return sands[i].Y > sands[j].Y
+		})
+		for _, sand := range sands {
+			if sand.South().Y < y {
+				if world.At(sand.South()) == 0 {
+					world.Set(sand, 0)
+					world.Set(sand.South(), '-')
+				} else if world.At(sand.SouthWest()) == 0 {
+					world.Set(sand, 0)
+					world.Set(sand.SouthWest(), '-')
+				} else if world.At(sand.SouthEast()) == 0 {
+					world.Set(sand, 0)
+					world.Set(sand.SouthEast(), '-')
+				}
+			}
+		}
+		if world.At(sandStart) == 0 {
+			world.Set(sandStart, 'V')
+		}
+		if particles%50 == 0 {
 			worlds = append(worlds, world.Crop())
+		}
+		if !moved {
+			world.Set(sandStart, 'v')
+			worlds = append(worlds, world.Crop())
+			break
 		}
 	}
 
@@ -116,6 +117,8 @@ func solution(name string, input []byte) int {
 	last := worlds[len(worlds)-1]
 	vpos := last.Find('v')[0]
 	_, _, maxx, maxy := last.Rect()
+
+	worlds = append(worlds, worlds[len(worlds)-1])
 
 	anim := &gif.GIF{
 		Image:    make([]*image.Paletted, len(worlds)),
@@ -129,7 +132,12 @@ func solution(name string, input []byte) int {
 		go func(i int, world *coord.DenseWorld) {
 			defer wg.Done()
 			img := image.NewPaletted(image.Rect(0, 0, maxx*scale, maxy*scale), aoc.TolVibrant)
-			wvpos := world.Find('v')[0]
+			var wvpos coord.Coord
+			if pos := world.Find('v'); len(pos) > 0 {
+				wvpos = pos[0]
+			} else if pos = world.Find('V'); len(pos) > 0 {
+				wvpos = pos[0]
+			}
 			adj := vpos.Minus(wvpos)
 			world.Each(func(c coord.Coord) (stop bool) {
 				view := c.Plus(adj)
@@ -137,6 +145,8 @@ func solution(name string, input []byte) int {
 				switch world.At(c) {
 				case 0:
 					col = color.Black
+				case '-':
+					col = aoc.TolVibrantRed
 				case '+':
 					col = aoc.TolVibrantOrange
 				default:
@@ -158,6 +168,8 @@ func solution(name string, input []byte) int {
 			anim.Disposal[i] = gif.DisposalNone
 		}(i, world)
 	}
+
+	anim.Delay[len(anim.Delay)-2] = 500
 
 	wg.Wait()
 
