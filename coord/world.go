@@ -2,6 +2,7 @@ package coord
 
 import (
 	"fmt"
+	"image"
 	"math"
 	"strings"
 )
@@ -78,6 +79,38 @@ func (w SparseWorld) Each(f func(Coord) bool) {
 
 type DenseWorld [][]rune
 
+func (d *DenseWorld) Crop() *DenseWorld {
+	ret := &DenseWorld{}
+	r := image.Rectangle{image.Pt(math.MaxInt, math.MaxInt), image.Pt(math.MinInt, math.MinInt)}
+	for y, row := range *d {
+		for x, cell := range row {
+			if cell == 0 {
+				continue
+			}
+			if y > r.Max.Y {
+				r.Max.Y = y
+			}
+			if y < r.Min.Y {
+				r.Min.Y = y
+			}
+			if x > r.Max.X {
+				r.Max.X = x
+			}
+			if x < r.Min.X {
+				r.Min.X = x
+			}
+		}
+	}
+	for py := r.Min.Y; py <= r.Max.Y; py++ {
+		for px := r.Min.X; px <= r.Max.X; px++ {
+			if px < len((*d)[py]) {
+				ret.Set(C(px-r.Min.X, py-r.Min.Y), (*d)[py][px])
+			}
+		}
+	}
+	return ret
+}
+
 func (d DenseWorld) Find(r rune) []Coord {
 	var ret []Coord
 	for y, row := range d {
@@ -101,7 +134,13 @@ func (d DenseWorld) Copy() World {
 }
 
 func (d DenseWorld) Rect() (minX, minY, maxX, maxY int) {
-	return 0, 0, len(d[0]) - 1, len(d) - 1
+	maxX = math.MinInt
+	for _, row := range d {
+		if len(row) > maxX {
+			maxX = len(row)
+		}
+	}
+	return 0, 0, maxX - 1, len(d) - 1
 }
 
 func (d DenseWorld) Print() {
@@ -109,18 +148,22 @@ func (d DenseWorld) Print() {
 	for _, row := range d {
 		sb.Reset()
 		for _, cell := range row {
-			sb.WriteRune(cell)
+			if cell == 0 {
+				sb.WriteRune(' ')
+			} else {
+				sb.WriteRune(cell)
+			}
 		}
 		fmt.Println(sb.String())
 	}
 }
 
 func (d DenseWorld) At(coord Coord) rune {
-	if len(d) <= coord.Y || coord.Y < 0 {
+	if coord.Y < 0 || coord.X < 0 {
 		return -1
 	}
-	if len(d[coord.Y]) <= coord.X || coord.X < 0 {
-		return -1
+	if len(d) <= coord.Y || len(d[coord.Y]) <= coord.X {
+		return 0
 	}
 	return d[coord.Y][coord.X]
 }
@@ -128,7 +171,7 @@ func (d DenseWorld) At(coord Coord) rune {
 func (d *DenseWorld) Set(coord Coord, r rune) {
 	height := len(*d)
 	if height <= coord.Y {
-		*d = append(*d, make([][]rune, height-coord.Y+1)...)
+		*d = append(*d, make([][]rune, coord.Y-height+1)...)
 	}
 	width := len((*d)[coord.Y])
 	if width <= coord.X {
