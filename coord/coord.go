@@ -146,3 +146,34 @@ func (c Coord) Equal(a Coord) bool {
 func (c Coord) Minus(a Coord) Coord {
 	return Coord{c.X - a.X, c.Y - a.Y}
 }
+
+func (c Coord) TaxiPerimeter(dist int) []Coord {
+	if dist == 0 {
+		return []Coord{c}
+	}
+
+	if dist < 0 {
+		panic("negative distance")
+	}
+
+	var ret []Coord
+	var cursor Coord = c
+	cursor.Y -= dist
+	for cursor.Y < c.Y {
+		cursor = cursor.SouthEast()
+		ret = append(ret, cursor)
+	}
+	for cursor.X > c.X {
+		cursor = cursor.SouthWest()
+		ret = append(ret, cursor)
+	}
+	for cursor.Y > c.Y {
+		cursor = cursor.NorthWest()
+		ret = append(ret, cursor)
+	}
+	for cursor.X < c.X {
+		cursor = cursor.NorthEast()
+		ret = append(ret, cursor)
+	}
+	return ret
+}

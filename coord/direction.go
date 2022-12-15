@@ -2,6 +2,10 @@ package coord
 
 type Direction int
 
+var Directions = []Direction{
+	North, NorthEast, East, SouthEast, South, SouthWest, West, NorthWest,
+}
+
 const (
 	North Direction = iota
 	NorthEast
