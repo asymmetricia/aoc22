@@ -18,6 +18,10 @@ func Path[Cell comparable](from Cell, prev map[Cell]Cell) []Cell {
 	return ret
 }
 
+func ConstantCost[K any](K, K) int {
+	return 1
+}
+
 // Dijkstra implements a generic Dijkstra's Algorithm, which is guaranteed to
 // find the shortest path from start to end, with edges given by repeated calls
 // to neighbors().
