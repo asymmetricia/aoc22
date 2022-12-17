@@ -34,8 +34,8 @@ func (w SparseWorld) Rect() (minX, minY, maxX, maxY int) {
 		if c.Y < minY {
 			minY = c.Y
 		}
-		if c.Y > maxX {
-			maxX = c.Y
+		if c.Y > maxY {
+			maxY = c.Y
 		}
 	}
 	return minX, minY, maxX, maxY
