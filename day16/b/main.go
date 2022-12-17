@@ -3,17 +3,15 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"net/http"
+	_ "net/http/pprof"
 	"os"
-	"sort"
-	"strconv"
 	"strings"
-	"time"
 	"unicode"
 
+	"github.com/asymmetricia/aoc22/aoc"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/exp/maps"
-
-	"github.com/asymmetricia/aoc22/aoc"
 )
 
 var log = logrus.StandardLogger()
@@ -26,188 +24,6 @@ type Valve struct {
 
 func (v *Valve) String() string {
 	return fmt.Sprintf("{rate=%d, neighbors=%v}", v.Rate, v.Peers)
-}
-
-type State struct {
-	Network map[string]*Valve `json:"-"`
-	Pos     string
-	//Goal         string
-	ElephantPos string
-	//ElephantGoal string
-	Open    map[string]bool
-	Minutes int
-}
-
-func (s *State) CK() string {
-	var ret strings.Builder
-	ret.WriteString(s.Pos)
-	//ret.WriteRune('|')
-	//ret.WriteString(s.Goal)
-	ret.WriteRune('|')
-	ret.WriteString(s.ElephantPos)
-	//ret.WriteRune('|')
-	//ret.WriteString(s.ElephantGoal)
-	ret.WriteRune('|')
-	ret.WriteString(strconv.Itoa(s.Minutes))
-	ret.WriteRune('|')
-	opens := maps.Keys(s.Open)
-	sort.Strings(opens)
-	ret.WriteString(strings.Join(opens, ","))
-	return ret.String()
-}
-
-func (s *State) Copy() *State {
-	return &State{
-		Network: s.Network,
-		Pos:     s.Pos,
-		//Goal:         s.Goal,
-		ElephantPos: s.ElephantPos,
-		//ElephantGoal: s.ElephantGoal,
-		Minutes: s.Minutes,
-		Open:    maps.Clone(s.Open),
-	}
-}
-
-func (s *State) HumanAction() []*State {
-	//ck := "ha_" + s.CK()
-
-	//checks++
-	//if cache, ok := cache[ck]; ok {
-	//	hits++
-	//	return cache
-	//}
-
-	var moves []*State
-	if !s.Open[s.Pos] {
-		n := s.Copy()
-		n.Open[s.Pos] = true
-		moves = append(moves, n)
-	}
-
-	if s.Minutes > 2 {
-		for neigh := range s.Network[s.Pos].Neighbors {
-			n := s.Copy()
-			n.Pos = neigh
-			moves = append(moves, n)
-		}
-	}
-
-	if len(moves) == 0 {
-		return []*State{s}
-	}
-	return moves
-}
-func (s *State) ElephantAction() []*State {
-	//ck := "ea_" + s.CK()
-
-	//checks++
-	//if cache, ok := cache[ck]; ok {
-	//	hits++
-	//	return cache
-	//}
-
-	var moves []*State
-	if !s.Open[s.ElephantPos] {
-		n := s.Copy()
-		n.Open[s.ElephantPos] = true
-		moves = append(moves, n)
-	}
-
-	if s.Minutes > 2 {
-		for neigh := range s.Network[s.ElephantPos].Neighbors {
-			n := s.Copy()
-			n.ElephantPos = neigh
-			moves = append(moves, n)
-		}
-	}
-
-	if len(moves) == 0 {
-		return []*State{s}
-	}
-	return moves
-}
-
-var cache = map[string][]*State{}
-var checks = 0
-var hits = 0
-var last = time.Now()
-
-func Act(s *State, depth int) []*State {
-	if s.Minutes == 0 {
-		return nil
-	}
-
-	ck := s.CK()
-	checks++
-	if cached, ok := cache[ck]; ok {
-		hits++
-		return cached
-	}
-
-	var candidates []*State
-	for _, state := range s.HumanAction() {
-		candidates = append(candidates, state.ElephantAction()...)
-	}
-
-	var best int
-	var bestCandidate []*State
-	//type seenKey struct {
-	//	P, G, P2, G2 string
-	//}
-	//seen := map[seenKey]bool{}
-	for i, cs := range candidates {
-		cs.Minutes--
-
-		//sk := seenKey{cs.Pos, cs.Goal, cs.ElephantPos, cs.ElephantGoal}
-		//rk := seenKey{cs.ElephantPos, cs.ElephantGoal, cs.Pos, cs.Goal}
-		//if seen[sk] || seen[rk] {
-		//	continue
-		//}
-		//seen[sk] = true
-
-		//if depth <= 16 {
-		if time.Since(last) > time.Second {
-			log.Printf("chr %d%% (%d/%d) depth %d, %d/%d, best -> %d", hits*100/checks, hits, checks, depth, i, len(candidates), best)
-			last = time.Now()
-			//log.Printf("depth %d, %d/%d, best -> %d", depth, i, len(candidates), best)
-		}
-		result := Act(cs, depth+1)
-		if Value(result) > best {
-			best = Value(result)
-			bestCandidate = result
-		}
-	}
-
-	ret := append([]*State{s}, bestCandidate...)
-	cache[ck] = ret
-	return ret
-}
-
-func (s State) String() string {
-	var opens []string
-	rate := 0
-	for valve := range s.Open {
-		rate += s.Network[valve].Rate
-		if s.Network[valve].Rate > 0 {
-			opens = append(opens, valve)
-		}
-	}
-	sort.Strings(opens)
-	return fmt.Sprintf("@%d me=%s, el=%s, open %v, rate %d", s.Minutes, s.Pos, s.ElephantPos, opens, rate)
-}
-
-func Value(states []*State) int {
-	ret := 0
-	for i, state := range states {
-		for open := range state.Open {
-			if i == len(states)-1 {
-				ret += state.Network[open].Rate * state.Minutes
-			} else {
-				ret += state.Network[open].Rate
-			}
-		}
-	}
-	return ret
 }
 
 var paths = map[[2]string][]string{}
@@ -230,26 +46,15 @@ func solution(name string, input []byte) int {
 			peers[i] = strings.Trim(peers[i], ",")
 		}
 		network[name] = &Valve{Rate: rate, Peers: peers, Neighbors: map[string]*Valve{}}
-		// 30min total
 	}
 
-	start := State{
-		Network:     network,
-		Pos:         "AA",
-		ElephantPos: "AA",
-		Open:        map[string]bool{},
-		Minutes:     26,
-	}
-
-	for id, valve := range network {
-		if valve.Rate == 0 {
-			start.Open[id] = true
-		}
+	for _, valve := range network {
 		for _, peer := range valve.Peers {
 			valve.Neighbors[peer] = network[peer]
 		}
 	}
 
+	// pre-compute shortest paths
 	paths = map[[2]string][]string{}
 	for a := range network {
 		for b := range network {
@@ -265,28 +70,14 @@ func solution(name string, input []byte) int {
 		}
 	}
 
-	//cache = map[string][]*State{}
-	//checks = 0
-	//hits = 0
-	if name == "test" {
-		for i := 0; i < 10; i++ {
-			path := Act(&start, 1)
-			if Value(path) != 1707 {
-				panic("nope")
-			}
-		}
-	}
-	log.Print(network)
-	path := Act(&start, 1)
-	for _, s := range path {
-		log.Print(s)
-	}
-	log.Print(Value(path))
-
-	return Value(path)
+	return -1
 }
 
 func main() {
+	go func() {
+		log.Println(http.ListenAndServe("localhost:6060", nil))
+	}()
+
 	log.SetFormatter(&logrus.TextFormatter{
 		FullTimestamp:   true,
 		TimestampFormat: "2006-01-02T15:04:05",
