@@ -3,17 +3,19 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"net/http"
+	_ "net/http/pprof"
 	"os"
+	"reflect"
 	"sort"
 	"strings"
 	"time"
 	"unicode"
 
+	"github.com/asymmetricia/aoc22/aoc"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/exp/maps"
 	"golang.org/x/exp/slices"
-
-	"github.com/asymmetricia/aoc22/aoc"
 )
 
 var log = logrus.StandardLogger()
@@ -22,51 +24,41 @@ type Valve struct {
 	Rate      int
 	Neighbors map[string]*Valve
 	Peers     []string
-	Open      bool
 }
 
 func (v *Valve) String() string {
 	return fmt.Sprintf("{rate=%d, neighbors=%v}", v.Rate, v.Peers)
 }
 
-// Explore returns a list of every legal path
-func Explore(pos string, network map[string]*Valve, unopened map[string]bool, minutes int, n int) [][]string {
-	// we could not actually get here lol
-	if minutes < 0 {
-		return nil
-	}
+var paths = map[[2]string][]string{}
 
-	// open this valve
-	if minutes > 0 && network[pos].Rate > 0 {
-		minutes--
-	}
-
-	// nowhere left to go, let them run
-	if len(unopened) == 0 || n == 0 {
-		return [][]string{nil}
-	}
-
-	var ret [][]string
-	uo := maps.Keys(unopened)
-	sort.Strings(uo)
-	for _, next := range uo {
-		path := paths[[2]string{pos, next}]
-
-		if len(path) > minutes {
-			continue
+func permutations(in []string, length int, maxlength int, log logrus.FieldLogger) <-chan []string {
+	ch := make(chan []string)
+	go func(in []string, length int, maxlength int, ch chan<- []string) {
+		defer close(ch)
+		if len(in) == 1 {
+			ch <- []string{in[0]}
+			return
 		}
 
-		// we will open this valve
-		candidateUnopened := map[string]bool{}
-		maps.Copy(candidateUnopened, unopened)
-		delete(candidateUnopened, next)
-
-		subpaths := Explore(next, network, candidateUnopened, minutes-len(path), n-1)
-		for _, sp := range subpaths {
-			ret = append(ret, slices.Insert(sp, 0, next))
+		if length == 1 {
+			for _, v := range in {
+				ch <- []string{v}
+			}
+			return
 		}
-	}
-	return ret
+
+		rest := make([]string, 0, len(in)-1)
+		for i, v := range in {
+			rest = rest[:0]
+			rest = append(rest, in[:i]...)
+			rest = append(rest, in[i+1:]...)
+			for end := range permutations(rest, length-1, maxlength, log) {
+				ch <- slices.Insert(end, 0, v)
+			}
+		}
+	}(in, length, maxlength, ch)
+	return ch
 }
 
 type World struct {
@@ -77,7 +69,7 @@ type World struct {
 }
 
 func simulate(network map[string]*Valve, order []string) (map[string]int, int) {
-	const actorCount = 1
+	const actorCount = 2
 	w := World{
 		Open:    map[string]int{},
 		Minutes: 26,
@@ -119,8 +111,6 @@ func simulate(network map[string]*Valve, order []string) (map[string]int, int) {
 	return w.Open, score
 }
 
-var paths = map[[2]string][]string{}
-
 func solution(name string, input []byte) int {
 	// trim trailing space only
 	input = bytes.Replace(input, []byte("\r"), []byte(""), -1)
@@ -141,18 +131,18 @@ func solution(name string, input []byte) int {
 		network[name] = &Valve{Rate: rate, Peers: peers, Neighbors: map[string]*Valve{}}
 	}
 
-	valveId := map[string]int{}
-	valves := map[string]bool{}
+	var valves []string
 	for id, valve := range network {
-		valveId[id] = len(valveId) + 1
-		if valve.Rate > 0 {
-			valves[id] = true
-		}
 		for _, peer := range valve.Peers {
 			valve.Neighbors[peer] = network[peer]
 		}
+		if valve.Rate > 0 {
+			valves = append(valves, id)
+		}
 	}
+	sort.Strings(valves)
 
+	// pre-compute shortest paths
 	paths = map[[2]string][]string{}
 	for a := range network {
 		for b := range network {
@@ -168,61 +158,111 @@ func solution(name string, input []byte) int {
 		}
 	}
 
-	best := 0
-	var bestPath [2][]string
-
-	type path struct {
-		path   []string
-		value  int
-		valves int64
+	const workers = 16
+	var orders = make(chan []string)
+	var resultsCh []reflect.SelectCase
+	type result struct {
+		Order  []string
+		Opened map[string]int
+		Value  int
 	}
-	var ourPaths []path
-	for i := 1; i <= 15; i++ {
-		p := Explore("AA", network, valves, 26, i)
-		for _, p := range p {
-			valves, v := simulate(network, p)
-			var vb int64
-			for valve := range valves {
-				vb |= 1 << valveId[valve]
+	for i := 0; i < workers; i++ {
+		rch := make(chan result)
+		go func(orders <-chan []string, ch chan<- result) {
+			defer close(ch)
+			for order := range orders {
+				opened, value := simulate(network, order)
+				ch <- result{order, opened, value}
 			}
-			ourPaths = append(ourPaths, path{p, v, vb})
-		}
+		}(orders, rch)
+		resultsCh = append(resultsCh, reflect.SelectCase{
+			Dir:  reflect.SelectRecv,
+			Chan: reflect.ValueOf(rch),
+		})
 	}
 
+	n := len(valves)/2 + len(valves)%2
+
+	go func() {
+		defer close(orders)
+		for order := range permutations(valves, n, n, log) {
+			orders <- order
+		}
+	}()
+
+	var total int64 = 1
+	for i := 0; i < n; i++ {
+		total *= int64(len(valves) - i)
+	}
+
+	count := 0
+	var lastPerc int64 = -1
 	last := time.Now()
-	for i, path := range ourPaths {
+
+	var results []result
+	for {
+		i, resultI, ok := reflect.Select(resultsCh)
+		if !ok {
+			resultsCh = append(resultsCh[:i], resultsCh[i+1:]...)
+			if len(resultsCh) == 0 {
+				break
+			}
+		}
+		count++
 		if time.Since(last) > time.Second {
-			log.Printf("%d/%d (%d%%)", i+1, len(ourPaths), (i+1)*100/len(ourPaths))
+			perc := int64(count) * 100 / total
+			if lastPerc != perc {
+				log.Printf("%d/%d (%d%%)", count, total, int64(count)*100/total)
+			}
+			lastPerc = perc
 			last = time.Now()
 		}
-		for _, pair := range ourPaths[i+1:] {
-			if path.valves&pair.valves > 0 {
-				continue
+
+		result := resultI.Interface().(result)
+		results = append(results, result)
+	}
+
+	var best int
+	var a, b result
+
+	for i, result := range results {
+		pairs:
+		for _, pair := range results[i+1:] {
+			for v := range result.Opened {
+				if _, ok := pair.Opened[v]; ok {
+					continue pairs
+				}
 			}
-			if path.value+pair.value > best {
-				best = path.value + pair.value
-				bestPath = [2][]string{path.path, pair.path}
+			for v := range pair.Opened {
+				if _, ok := result.Opened[v]; ok {
+					continue pairs
+				}
+			}
+			if result.Value + pair.Value > best {
+				best = result.Value + pair.Value
+				a = result
+				b = pair
 			}
 		}
 	}
 
-	log.Printf("%v -> %d", bestPath, best)
+	log.Printf("%v + %v = %d", a, b, best)
 
 	return best
 }
 
 func main() {
+	go func() {
+		log.Println(http.ListenAndServe("localhost:6060", nil))
+	}()
+
 	log.SetFormatter(&logrus.TextFormatter{
 		FullTimestamp:   true,
 		TimestampFormat: "2006-01-02T15:04:05",
 	})
 	test, err := os.ReadFile("test")
 	if err == nil {
-		ts := solution("test", test)
-		log.Printf("test solution: %d", ts)
-		if ts != 1707 {
-			panic("nope")
-		}
+		log.Printf("test solution: %d", solution("test", test))
 	} else {
 		log.Warningf("no test data present")
 	}
