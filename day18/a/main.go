@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"strings"
 	"unicode"
@@ -20,11 +21,36 @@ func solution(name string, input []byte) int {
 	lines := strings.Split(strings.TrimRightFunc(string(input), unicode.IsSpace), "\n")
 	log.Printf("read %d %s lines", len(lines), name)
 
-	//for _, line := range lines {
-	//	//fields := strings.Fields(line)
-	//}
+	type coord struct {
+		x, y, z int
+	}
+	world := map[coord]bool{}
+	for _, line := range lines {
+		var x, y, z int
+		fmt.Sscanf(line, "%d,%d,%d", &x, &y, &z)
+		world[coord{x, y, z}] = true
+	}
 
-	return -1
+	var surfaces int
+	for cube := range world {
+		for _, dx := range []int{-1, 1} {
+			if !world[coord{cube.x+dx, cube.y, cube.z}] {
+				surfaces++
+			}
+		}
+		for _, dy := range []int{-1, 1} {
+			if !world[coord{cube.x, cube.y+dy, cube.z}] {
+				surfaces++
+			}
+		}
+		for _, dz := range []int{-1, 1} {
+			if !world[coord{cube.x, cube.y, cube.z+dz}] {
+				surfaces++
+			}
+		}
+	}
+
+	return surfaces
 }
 
 func main() {
