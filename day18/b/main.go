@@ -5,18 +5,17 @@ import (
 	"fmt"
 	"image"
 	"image/color"
-	"image/draw"
-	"image/gif"
+	"math"
 	"os"
-	"sort"
 	"strings"
+	"sync"
 	"unicode"
 
-	"github.com/asymmetricia/aoc22/aoc"
-	"github.com/fogleman/fauxgl"
-	"github.com/nfnt/resize"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/exp/maps"
+
+	"github.com/asymmetricia/aoc22/aoc"
+	"github.com/asymmetricia/aoc22/isovox"
 )
 
 var log = logrus.StandardLogger()
@@ -25,51 +24,72 @@ type coord struct {
 	x, y, z int
 }
 
-const (
-	scale  = 2   // optional supersampling
-	width  = 800 // output width in pixels
-	height = 800 // output height in pixels
-	fovy   = 30  // vertical field of view in degrees
-	near   = 1   // near clipping plane
-	far    = 300 // far clipping plane
-)
+func (c coord) ivc() isovox.Coord {
+	return isovox.Coord{c.x, c.y, c.z}
+}
 
-var (
-	eye    = fauxgl.V(50, 60, -100)              // camera position
-	center = fauxgl.V(15, 15, 20)                // view center position
-	up     = fauxgl.V(0, 1, 0)                   // up vector
-	light  = fauxgl.V(0.75, 1, -.25).Normalize() // light direction
-)
-
-func render(world map[coord]int) image.Image {
-	rctx := fauxgl.NewContext(width*scale, height*scale)
-	rctx.ClearColorBufferWith(fauxgl.Black)
-
-	aspect := float64(width) / float64(height)
-	matrix := fauxgl.LookAt(eye, center, up).Perspective(fovy, aspect, near, far)
-	shader := fauxgl.NewPhongShader(matrix, light, eye)
-	rctx.Shader = shader
-
-	red := fauxgl.MakeColor(aoc.TolVibrantRed)
-	blue := fauxgl.MakeColor(aoc.TolVibrantCyan).Alpha(0.5)
+func bounds(world map[coord]int, f ...func(coord, int) bool) (min, max coord) {
+	min = coord{math.MaxInt, math.MaxInt, math.MaxInt}
+	max = coord{math.MinInt, math.MinInt, math.MinInt}
 	for c, v := range world {
-		voxel := fauxgl.Voxel{
-			X: c.x * 2,
-			Y: c.z * 2,
-			Z: c.y * 2,
+		if len(f) > 0 && !f[0](c, v) {
+			continue
 		}
-		if v == 2 {
-			voxel.Color = blue
-		} else {
-			voxel.Color = red
+
+		min.x = aoc.Min(min.x, c.x)
+		min.y = aoc.Min(min.y, c.y)
+		min.z = aoc.Min(min.z, c.z)
+		max.x = aoc.Max(max.x, c.x)
+		max.y = aoc.Max(max.y, c.y)
+		max.z = aoc.Max(max.z, c.z)
+	}
+	return
+}
+
+func render(world, extra map[coord]int) image.Image {
+	world = maps.Clone(world)
+	maps.Copy(world, extra)
+	min, max := bounds(world, func(c coord, v int) bool {
+		return v == 1
+	})
+	ivw := &isovox.World{Voxels: map[isovox.Coord]*isovox.Voxel{}}
+
+	for _, x := range []int{min.x - 1, max.x + 1} {
+		for _, y := range []int{min.y - 1, max.y + 1} {
+			for _, z := range []int{min.z - 1, max.z + 1} {
+				ivw.Voxels[isovox.Coord{x, y, z}] = &isovox.Voxel{Color: color.Transparent}
+			}
 		}
-		rctx.DrawMesh(fauxgl.NewVoxelMesh([]fauxgl.Voxel{voxel}))
 	}
 
-	return resize.Resize(width, height, rctx.Image(), resize.Bilinear)
+	cyan := color.NRGBA{51, 187, 238, 0x10}
+	for c, v := range world {
+		switch v {
+		case 1:
+			ivw.Voxels[c.ivc()] = &isovox.Voxel{Color: aoc.TolVibrantRed}
+		case 2:
+			ivw.Voxels[c.ivc()] = &isovox.Voxel{Color: cyan}
+		case 3:
+			ivw.Voxels[c.ivc()] = &isovox.Voxel{Color: aoc.TolVibrantOrange}
+		}
+	}
+
+	return ivw.Render(24)
 }
 
 func solution(name string, input []byte) int {
+	ich := make(chan image.Image)
+	ffmpegErr := aoc.RenderMP4(ich, "day18-b-"+name+".mp4", 60, log)
+	ffmpegWg := &sync.WaitGroup{}
+	ffmpegWg.Add(1)
+	defer ffmpegWg.Wait()
+	go func(ffmpegErr <-chan error) {
+		defer ffmpegWg.Done()
+		for err := range ffmpegErr {
+			log.Error(err)
+		}
+	}(ffmpegErr)
+
 	// trim trailing space only
 	input = bytes.Replace(input, []byte("\r"), []byte(""), -1)
 	input = bytes.TrimRightFunc(input, unicode.IsSpace)
@@ -115,133 +135,72 @@ func solution(name string, input []byte) int {
 	max.y++
 	max.z++
 
-	var images []image.Image
 	log.Print(min, max)
 	world[min] = 2
 	changed := true
-	water := 0
+	water := 1
 	for changed {
 		changed = false
-		for z := min.z; z <= max.z; z++ {
-			for x := min.x; x <= max.x; x++ {
-			cube:
-				for y := min.y; y <= max.y; y++ {
-					// 0123456789
-					// 2222222210
-					v := world[coord{x, y, z}]
-					if v > 0 {
+		toAdd := map[coord]int{}
+		for c, v := range world {
+			if v == 2 {
+				x, y, z := c.x, c.y, c.z
+				for _, n := range []coord{
+					{x + 1, y, z}, {x - 1, y, z},
+					{x, y + 1, z}, {x, y - 1, z},
+					{x, y, z + 1}, {x, y, z - 1},
+				} {
+					if n.x < min.x || n.x > max.x ||
+						n.y < min.y || n.y > max.y ||
+						n.z < min.z || n.z > max.z {
 						continue
 					}
-					neighbors := []coord{
-						coord{x, y + 1, z},
-						coord{x, y - 1, z},
-						coord{x + 1, y, z},
-						coord{x - 1, y, z},
-						coord{x, y, z + 1},
-						coord{x, y, z - 1},
-					}
-					for _, neighbor := range neighbors {
-						n := world[neighbor]
-						if n == 2 {
-							water++
-							changed = true
-							world[coord{x, y, z}] = 2
-							if water%100 == 0 {
-								log.Print(water)
-								images = append(images, render(world))
-							}
-							continue cube
+					if world[n] == 0 && toAdd[n] == 0 {
+						water++
+						changed = true
+						toAdd[n] = 2
+						if water < 10 ||
+							water < 1000 && water%5 == 0 ||
+							water%50 == 0 {
+							ich <- render(world, toAdd)
 						}
 					}
 				}
 			}
 		}
-	}
-
-	fmt.Printf("z=%d\n", (min.z+max.z)/2)
-	for y := min.y; y <= max.y; y++ {
-		fmt.Printf("%3d ", y)
-		for x := min.x; x <= max.x; x++ {
-			print(world[coord{x, y, (min.z + max.z) / 2}])
-		}
-		println()
+		log.Print(water)
+		maps.Copy(world, toAdd)
 	}
 
 	surfaces := 0
-	for x := min.x; x <= max.x; x++ {
-		for y := min.y; y <= max.y; y++ {
-			for z := min.z; z <= max.z; z++ {
+	for z := min.z; z <= max.z; z++ {
+		exp := false
+		for x := min.x; x <= max.x; x++ {
+			for y := min.y; y <= max.y; y++ {
 				if world[coord{x, y, z}] != 1 {
 					continue
 				}
 				neighbors := []coord{
-					coord{x, y + 1, z},
-					coord{x, y - 1, z},
-					coord{x + 1, y, z},
-					coord{x - 1, y, z},
-					coord{x, y, z + 1},
-					coord{x, y, z - 1},
+					{x + 1, y, z}, {x - 1, y, z},
+					{x, y + 1, z}, {x, y - 1, z},
+					{x, y, z + 1}, {x, y, z - 1},
 				}
 				for _, neighbor := range neighbors {
 					if world[neighbor] == 2 {
+						world[coord{x, y, z}] = 3
+						exp = true
 						surfaces++
 					}
 				}
 			}
 		}
-	}
-
-	images = append(images, render(world))
-	images = append(images, render(world))
-
-	palette := color.Palette{
-		color.Black,
-		color.Transparent,
-		color.White,
-	}
-
-	colors := map[color.RGBA64]int{}
-	for _, img := range images {
-		rect := img.Bounds()
-		min, max := rect.Min, rect.Max
-		for x := min.X; x <= max.X; x++ {
-			for y := min.Y; y <= max.Y; y++ {
-				r, g, b, a := img.At(x, y).RGBA()
-				colors[color.RGBA64{
-					R: uint16(r),
-					G: uint16(g),
-					B: uint16(b),
-					A: uint16(a),
-				}]++
-			}
+		log.Printf("counting surfaces, z=%d", z)
+		if exp {
+			ich <- render(world, nil)
 		}
 	}
-	log.Print(len(colors), " colors")
-	colorList := maps.Keys(colors)
-	sort.Slice(colorList, func(i, j int) bool {
-		return colors[colorList[j]] < colors[colorList[i]]
-	})
-	for len(palette) < 255 && len(colorList) > 0 {
-		palette = append(palette, colorList[0])
-		colorList = colorList[1:]
-	}
 
-	anim := &gif.GIF{}
-	for _, img := range images {
-		pimg := image.NewPaletted(img.Bounds(), palette)
-		draw.FloydSteinberg.Draw(pimg, img.Bounds(), img, image.Point{})
-		anim.Image = append(anim.Image, pimg)
-	}
-	anim.Delay = make([]int, len(anim.Image))
-	anim.Disposal = make([]byte, len(anim.Image))
-	for i := range anim.Image {
-		anim.Delay[i] = 2
-		anim.Disposal[i] = gif.DisposalNone
-	}
-	anim.Delay[len(anim.Delay)-2] = 300
-
-	aoc.SaveGIF(anim, "day18-b-"+name+".gif", log)
-
+	close(ich)
 	return surfaces
 }
 
