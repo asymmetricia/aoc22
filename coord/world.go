@@ -41,10 +41,18 @@ func (w SparseWorld) Rect() (minX, minY, maxX, maxY int) {
 	return minX, minY, maxX, maxY
 }
 
-func (w SparseWorld) Print() {
+func (w SparseWorld) Print(opts ...PrintOption) {
 	minx, miny, maxx, maxy := w.Rect()
 
-	for y := miny; y <= maxy; y++ {
+	a, b, c := miny, func(y int) bool { return y <= maxy }, 1
+
+	for _, opt := range opts {
+		if opt == InvertY {
+			a, b, c = maxy, func(y int) bool { return y >= miny }, -1
+		}
+	}
+
+	for y := a; b(y); y += c {
 		sb := strings.Builder{}
 		for x := minx; x <= maxx; x++ {
 			if ch, ok := w[C(x, y)]; ok {
@@ -66,7 +74,11 @@ func (w SparseWorld) At(coord Coord) rune {
 }
 
 func (w SparseWorld) Set(coord Coord, r rune) {
-	w[coord] = r
+	if r == 0 {
+		delete(w, coord)
+	} else {
+		w[coord] = r
+	}
 }
 
 func (w SparseWorld) Each(f func(Coord) bool) {
@@ -143,9 +155,16 @@ func (d DenseWorld) Rect() (minX, minY, maxX, maxY int) {
 	return 0, 0, maxX - 1, len(d) - 1
 }
 
-func (d DenseWorld) Print() {
+func (d DenseWorld) Print(opts ...PrintOption) {
 	sb := &strings.Builder{}
-	for _, row := range d {
+	a, b, c := 0, func(y int) bool { return y < len(d) }, +1
+	for _, opt := range opts {
+		if opt == InvertY {
+			a, b, c = len(d)-1, func(y int) bool { return y >= 0 }, -1
+		}
+	}
+	for y := a; b(y); y += c {
+		row := d[y]
 		sb.Reset()
 		for _, cell := range row {
 			if cell == 0 {
@@ -190,8 +209,14 @@ func (d *DenseWorld) Each(f func(Coord) (stop bool)) {
 	}
 }
 
+type PrintOption int
+
+const (
+	InvertY PrintOption = iota
+)
+
 type World interface {
-	Print()
+	Print(...PrintOption)
 	At(Coord) rune
 	Set(Coord, rune)
 	Each(func(Coord) (stop bool))

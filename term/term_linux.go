@@ -27,6 +27,14 @@ func Height() (uint, error) {
 	return uint(ws.Row), nil
 }
 
+func MustWidth() uint {
+	if w, err := Width(); err != nil {
+		return 80
+	} else {
+		return w
+	}
+}
+
 func Width() (uint, error) {
 	ws := &winsize{}
 	retCode, _, errno := syscall.Syscall(syscall.SYS_IOCTL,
