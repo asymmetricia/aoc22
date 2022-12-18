@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"image"
 	"image/color"
+	"image/png"
 	"math"
 	"os"
 	"strings"
@@ -201,6 +202,18 @@ func solution(name string, input []byte) int {
 	}
 
 	close(ich)
+
+	f, err := os.OpenFile("day18-b-"+name+".png", os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
+	if err == nil {
+		err = png.Encode(f, render(world, nil))
+	}
+	if err == nil {
+		err = f.Sync()
+	}
+	if err == nil {
+		err = f.Close()
+	}
+
 	return surfaces
 }
 
