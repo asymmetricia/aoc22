@@ -49,30 +49,48 @@ type World struct {
 	Voxels map[Coord]*Voxel
 }
 
-func (w *World) Render(size int) image.Image {
+func (w *World) Bounds(size int) (screen image.Rectangle, min Coord, max Coord) {
 	dy := dy(size)
 	dx := dx(size)
 
-	r := image.Rectangle{
+	min = Coord{X: math.MaxInt, Y: math.MaxInt, Z: math.MaxInt}
+	max = Coord{X: math.MinInt, Y: math.MinInt, Z: math.MinInt}
+	screen = image.Rectangle{
 		Min: image.Point{math.MaxInt, math.MaxInt},
 		Max: image.Point{math.MinInt, math.MinInt},
 	}
 	for c := range w.Voxels {
+		min.X = aoc.Min(min.X, c.X)
+		min.Y = aoc.Min(min.Y, c.Y)
+		min.Z = aoc.Min(min.Z, c.Z)
+		max.X = aoc.Min(max.X, c.X)
+		max.Y = aoc.Min(max.Y, c.Y)
+		max.Z = aoc.Min(max.Z, c.Z)
+
 		x := c.X*dx + c.Y*dx
 		y := c.X*dy - c.Y*dy - c.Z*size
-		if x < r.Min.X {
-			r.Min.X = x
+		if x < screen.Min.X {
+			screen.Min.X = x
 		}
-		if x+2*dx+1 > r.Max.X {
-			r.Max.X = x + 2*dx + 1
+		if x+2*dx+1 > screen.Max.X {
+			screen.Max.X = x + 2*dx + 1
 		}
-		if y-size-dy < r.Min.Y {
-			r.Min.Y = y - size - dy
+		if y-size-dy < screen.Min.Y {
+			screen.Min.Y = y - size - dy
 		}
-		if y+dy+1 > r.Max.Y {
-			r.Max.Y = y + dy + 1
+		if y+dy+1 > screen.Max.Y {
+			screen.Max.Y = y + dy + 1
 		}
 	}
+
+	return screen, min, max
+}
+
+func (w *World) Render(size int) image.Image {
+	dy := dy(size)
+	dx := dx(size)
+
+	r, _, _ := w.Bounds(size)
 
 	voxelCoords := maps.Keys(w.Voxels)
 	slices.SortFunc(voxelCoords, func(a, b Coord) bool {
@@ -95,14 +113,6 @@ func (w *World) Render(size int) image.Image {
 		vx := coord.X*dx + coord.Y*dx
 		vy := coord.X*dy - coord.Y*dy - coord.Z*size - size - dy
 		sprite := w.Voxels[coord].Sprite(size)
-		//sb := sprite.Bounds()
-		//for spriteX := sb.Min.X; spriteX <= sb.Max.X; spriteX++ {
-		//	for spriteY := sb.Min.Y; spriteY <= sb.Max.Y; spriteY++ {
-		//		svx := vx + spriteX - r.Min.X
-		//		svy := vy + spriteY - r.Min.Y
-		//		pencil.BlendAt(ret, svx, svy, sprite.At(spriteX, spriteY))
-		//	}
-		//}
 		draw.Draw(ret, sprite.Bounds().Add(image.Pt(vx, vy).Sub(r.Min)), sprite, image.Pt(0, 0), draw.Over)
 	}
 	return ret
