@@ -8,6 +8,8 @@ import (
 
 	"golang.org/x/exp/maps"
 	"golang.org/x/exp/slices"
+
+	"github.com/asymmetricia/aoc22/aoc"
 )
 
 type Coord struct {
