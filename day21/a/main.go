@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"strings"
 	"unicode"
@@ -18,13 +19,61 @@ func solution(name string, input []byte) int {
 	input = bytes.Replace(input, []byte("\r"), []byte(""), -1)
 	input = bytes.TrimRightFunc(input, unicode.IsSpace)
 	lines := strings.Split(strings.TrimRightFunc(string(input), unicode.IsSpace), "\n")
-	log.Printf("read %d %s lines", len(lines), name)
+	uniq := map[string]bool{}
+	for _, line := range lines {
+		uniq[line] = true
+	}
+	log.Printf("read %d %s lines (%d unique)", len(lines), name, len(uniq))
 
-	//for _, line := range lines {
-	//	//fields := strings.Fields(line)
-	//}
+	values := map[string]int{}
+	for _, line := range lines {
+		var monkey string
+		var value int
+		_, err := fmt.Sscanf(line, "%4s: %d", &monkey, &value)
+		if err == nil {
+			log.Printf("found %s = %d", monkey, value)
+			values[monkey] = value
+		}
+	}
+	changed := true
+	for changed {
+		changed = false
+		for _, line := range lines {
+			var monkey, op1, op2 string
+			var op rune
+			_, err := fmt.Sscanf(line, "%4s: %4s %c %4s", &monkey, &op1, &op, &op2)
+			if err != nil {
+				continue
+			}
+			if _, ok := values[monkey]; ok {
+				continue
+			}
+			v1, ok1 := values[op1]
+			v2, ok2 := values[op2]
+			if !ok1 || !ok2 {
+				continue
+			}
+			switch op {
+			case '+':
+				values[monkey] = v1+v2
+			case '-':
+				values[monkey] = v1-v2
+			case '*':
+				values[monkey] = v1*v2
+			case '/':
+				values[monkey] = v1/v2
+			default:
+				panic(string(op))
+			}
+			log.Printf("concluded %s => %d", monkey, values[monkey])
+			changed = true
+		}
+	}
 
-	return -1
+	if name == "test" && values["root"] != 152 {
+		panic("nope")
+	}
+	return values["root"]
 }
 
 func main() {
