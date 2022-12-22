@@ -18,7 +18,11 @@ func solution(name string, input []byte) int {
 	input = bytes.Replace(input, []byte("\r"), []byte(""), -1)
 	input = bytes.TrimRightFunc(input, unicode.IsSpace)
 	lines := strings.Split(strings.TrimRightFunc(string(input), unicode.IsSpace), "\n")
-	log.Printf("read %d %s lines", len(lines), name)
+	uniq := map[string]bool{}
+	for _, line := range lines {
+		uniq[line] = true
+	}
+	log.Printf("read %d %s lines (%d unique)", len(lines), name, len(uniq))
 
 	//for _, line := range lines {
 	//	//fields := strings.Fields(line)
