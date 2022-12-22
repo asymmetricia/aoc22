@@ -156,16 +156,19 @@ func (d DenseWorld) Rect() (minX, minY, maxX, maxY int) {
 }
 
 func (d DenseWorld) Print(opts ...PrintOption) {
+	fmt.Println(d.String())
+}
+
+func (d DenseWorld) String() string {
 	sb := &strings.Builder{}
 	a, b, c := 0, func(y int) bool { return y < len(d) }, +1
-	for _, opt := range opts {
-		if opt == InvertY {
-			a, b, c = len(d)-1, func(y int) bool { return y >= 0 }, -1
-		}
-	}
+	//for _, opt := range opts {
+	//	if opt == InvertY {
+	//		a, b, c = len(d)-1, func(y int) bool { return y >= 0 }, -1
+	//	}
+	//}
 	for y := a; b(y); y += c {
 		row := d[y]
-		sb.Reset()
 		for _, cell := range row {
 			if cell == 0 {
 				sb.WriteRune(' ')
@@ -173,8 +176,9 @@ func (d DenseWorld) Print(opts ...PrintOption) {
 				sb.WriteRune(cell)
 			}
 		}
-		fmt.Println(sb.String())
+		sb.WriteRune('\n')
 	}
+	return sb.String()
 }
 
 func (d DenseWorld) At(coord Coord) rune {
