@@ -142,74 +142,101 @@ func PaletteFrom(images []image.Image) color.Palette {
 	return ret
 }
 
-func RenderMP4(images <-chan image.Image, filename string, framerate int, log ...logrus.FieldLogger) <-chan error {
-	errch := make(chan error)
-	go func(images <-chan image.Image, filename string, errch chan<- error) {
-		defer close(errch)
+func RenderPng(image image.Image, filename string) error {
+	f, err := os.OpenFile(filename, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
+	if err != nil {
+		return err
+	}
 
-		ffmpeg, err := exec.LookPath("ffmpeg")
-		if err != nil {
-			errch <- fmt.Errorf("could not find ffmpeg in path: %w", err)
-			return
-		}
+	if err := png.Encode(f, image); err != nil {
+		f.Close()
+		return err
+	}
 
-		cmd := exec.Command(ffmpeg,
-			"-y",
-			"-hide_banner",
-			"-f", "image2pipe",
-			"-c:v", "png",
-			"-framerate", strconv.Itoa(framerate),
-			"-i", "-",
-			"-c:v", "libx264",
-			"-movflags", "+faststart",
-			"-preset", "veryslow",
-			"-tune", "animation",
-			"-threads", "0",
-			"-crf", "22",
-			"-f", "mp4",
-			"-vf", "format=yuv420p",
-			filename,
-		)
+	if err := f.Sync(); err != nil {
+		f.Close()
+		return err
+	}
 
-		w, _ := cmd.StdinPipe()
+	return f.Close()
+}
 
-		if len(log) > 0 {
-			outPipe, _ := cmd.StdoutPipe()
-			errPipe, _ := cmd.StderrPipe()
+type MP4Encoder struct {
+	cmd   *exec.Cmd
+	stdin io.WriteCloser
+}
 
-			go func(r io.Reader) {
-				sc := bufio.NewScanner(r)
-				for sc.Scan() {
-					log[0].Printf("ffmpeg: %s", sc.Text())
-				}
-			}(outPipe)
+func NewMP4Encoder(filename string, framerate int, log ...logrus.FieldLogger) (*MP4Encoder, error) {
+	ffmpeg, err := exec.LookPath("ffmpeg")
+	if err != nil {
+		return nil, fmt.Errorf("could not find ffmpeg in path: %w", err)
+	}
 
-			go func(r io.Reader) {
-				sc := bufio.NewScanner(r)
-				for sc.Scan() {
-					log[0].Errorf("ffmpeg: %s", sc.Text())
-				}
-			}(errPipe)
-		}
+	cmd := exec.Command(ffmpeg,
+		"-loglevel", "info",
+		"-stats",
+		"-y",
+		"-hide_banner",
+		"-f", "image2pipe",
+		"-c:v", "png",
+		"-framerate", strconv.Itoa(framerate),
+		"-i", "-",
+		"-c:v", "libx264",
+		//"-movflags", "+faststart+frag_keyframe+separate_moof+omit_tfhd_offset+empty_moov",
+		"-preset", "veryslow",
+		"-tune", "animation",
+		"-threads", "0",
+		"-crf", "22",
+		"-f", "ismv",
+		"-vf", "format=yuv420p",
+		filename,
+	)
 
-		if err := cmd.Start(); err != nil {
-			errch <- fmt.Errorf("could not start ffmpeg: %w", err)
-			return
-		}
+	in, _ := cmd.StdinPipe()
 
-		defer cmd.Wait() // must be deferred before w.Close
-		defer w.Close()
+	if len(log) > 0 {
+		outPipe, _ := cmd.StdoutPipe()
+		errPipe, _ := cmd.StderrPipe()
 
-		enc := &png.Encoder{
-			CompressionLevel: png.NoCompression,
-		}
-
-		for img := range images {
-			if err := enc.Encode(w, img); err != nil {
-				errch <- fmt.Errorf("encoding PNG: %w", err)
-				return
+		go func(r io.Reader) {
+			sc := bufio.NewScanner(r)
+			for sc.Scan() {
+				log[0].Printf("ffmpeg: %s", sc.Text())
 			}
-		}
-	}(images, filename, errch)
-	return errch
+		}(outPipe)
+
+		go func(r io.Reader) {
+			sc := bufio.NewScanner(r)
+			for sc.Scan() {
+				log[0].Errorf("ffmpeg: %s", sc.Text())
+			}
+		}(errPipe)
+	}
+
+	if err := cmd.Start(); err != nil {
+		return nil, fmt.Errorf("could not start ffmpeg: %w", err)
+	}
+
+	return &MP4Encoder{
+		cmd:   cmd,
+		stdin: in,
+	}, nil
+}
+
+func (enc *MP4Encoder) Encode(image image.Image) error {
+	err := png.Encode(enc.stdin, image)
+	if err != nil {
+		return err
+	}
+	if f, ok := enc.stdin.(*os.File); ok {
+		return f.Sync()
+	}
+	return nil
+}
+
+func (enc *MP4Encoder) Close() error {
+	if err := enc.stdin.Close(); err != nil {
+		return err
+	}
+	return enc.cmd.Wait()
 }
