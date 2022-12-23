@@ -3,6 +3,7 @@ package aoc
 import (
 	"bytes"
 	_ "embed"
+	"fmt"
 	"image"
 	"image/color"
 	"image/draw"
@@ -41,6 +42,7 @@ func init() {
 	} {
 		Glyphs[name] = map[rune]Glyph{}
 
+		data := bytes.ReplaceAll(data, []byte("\r"), nil)
 		glyphdata := bytes.Split(bytes.TrimSpace(data), []byte("\n\n"))
 		for _, gtxt := range glyphdata {
 			g := Glyph{}
@@ -60,6 +62,9 @@ func init() {
 		colsRight:
 			for x := len(rows[1]) - 1; x > 0; x-- {
 				for _, row := range rows[1:] {
+					if x >= len(row) {
+						continue
+					}
 					if row[x] == '#' {
 						break colsRight
 					}
@@ -94,7 +99,7 @@ func init() {
 					} else if keyByte >= 'A' && keyByte <= 'F' {
 						keyByte -= 'A' + 10
 					} else {
-						panic("expected hex digit, found " + string(keyByte))
+						panic(fmt.Sprintf("expected hex digit, found %q", string(keyByte)))
 					}
 					accum = append(accum, keyByte)
 					if len(accum) == 2 {

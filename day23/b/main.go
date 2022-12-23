@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"image"
 	"image/color"
+	"image/color/palette"
 	"image/draw"
+	"image/gif"
 	"math/rand"
 	"os"
 	"strings"
@@ -16,6 +18,9 @@ import (
 	"github.com/asymmetricia/aoc22/isovox"
 	"github.com/sirupsen/logrus"
 )
+
+const video = false
+const renderGif = true
 
 var log = logrus.StandardLogger()
 
@@ -31,7 +36,15 @@ func (w world) Render() image.Image {
 	for _, elf := range w.world.Find('#') {
 		iw.Voxels[isovox.Coord{elf.X, elf.Y, 0}] = &isovox.Voxel{Color: w.elves[elf]}
 	}
-	return iw.Render(9)
+
+	img := iw.Render(9)
+	if !renderGif {
+		return img
+	}
+
+	imgp := image.NewPaletted(img.Bounds(), append(aoc.TolVibrant, palette.WebSafe...))
+	draw.FloydSteinberg.Draw(imgp, img.Bounds(), img, image.Pt(0, 0))
+	return imgp
 }
 
 type consideration struct {
@@ -150,13 +163,6 @@ func solution(name string, input []byte) int {
 			//log.Printf("from %v to %v, %d elves", from[0], to, len(*w.world))
 		}
 		w.proposal = map[coord.Coord][]coord.Coord{}
-		//if count%100 == 0 {
-		//term.Clear()
-		//term.MoveCursor(1, 1)
-		//w.world.Print()
-		//println(len(init))
-		//}
-		//os.Stdin.Read([]byte{0})
 		count++
 
 		if name == "test" || count%5 == 0 {
@@ -182,47 +188,68 @@ func solution(name string, input []byte) int {
 	for round() {
 	}
 
-	enc, err := aoc.NewMP4Encoder("day23-b-"+name+".mp4", 60, log)
-	if err != nil {
-		log.Fatal(err)
+	images = append(images, w.Render())
+
+	if video {
+		enc, err := aoc.NewMP4Encoder("day23-b-"+name+".mp4", 60, log)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		rect := images[0].Bounds()
+		for _, img := range images {
+			ir := img.Bounds()
+			if ir.Dx() > rect.Dx() {
+				rect.Min.X, rect.Max.X = ir.Min.X, ir.Max.X
+			}
+			if ir.Dy() > rect.Dy() {
+				rect.Min.Y, rect.Max.Y = ir.Min.Y, ir.Max.Y
+			}
+		}
+		padded := image.NewRGBA(rect)
+
+		perc := 0
+		for i, img := range images {
+			//y := rect.Dx() * img.Bounds().Dy() / img.Bounds().Dx()
+			//resized := resize.Resize(uint(rect.Dx()), uint(y), img, resize.Bicubic)
+			//diff := rect.Dy() - y
+			diffX := rect.Dx() - img.Bounds().Dx()
+			diffY := rect.Dy() - img.Bounds().Dy()
+			draw.Draw(padded, padded.Bounds(), image.Black, image.Pt(0, 0), draw.Over)
+			draw.Draw(
+				padded,
+				image.Rect(diffX/2, diffY/2, diffX/2+img.Bounds().Dx(), diffY/2+img.Bounds().Dy()),
+				img,
+				image.Pt(0, 0),
+				draw.Over,
+			)
+
+			enc.Encode(padded)
+			if p := (i + 1) * 10 / len(images); p > perc {
+				log.Printf("Encoding %d%%...", p*10)
+				perc = p
+			}
+		}
+
+		enc.Close()
 	}
 
-	rect := images[0].Bounds()
-	for _, img := range images {
-		ir := img.Bounds()
-		if ir.Dx() > rect.Dx() {
-			rect.Min.X, rect.Max.X = ir.Min.X, ir.Max.X
+	if renderGif {
+		anim := &gif.GIF{}
+		for _, img := range images {
+			anim.Image = append(anim.Image, img.(*image.Paletted))
+			anim.Delay = append(anim.Delay, 2)
+			anim.Disposal = append(anim.Disposal, gif.DisposalNone)
 		}
-		if ir.Dy() > rect.Dy() {
-			rect.Min.Y, rect.Max.Y = ir.Min.Y, ir.Max.Y
-		}
-	}
-	padded := image.NewRGBA(rect)
 
-	perc := 0
-	for i, img := range images {
-		//y := rect.Dx() * img.Bounds().Dy() / img.Bounds().Dx()
-		//resized := resize.Resize(uint(rect.Dx()), uint(y), img, resize.Bicubic)
-		//diff := rect.Dy() - y
-		diffX := rect.Dx() - img.Bounds().Dx()
-		diffY := rect.Dy() - img.Bounds().Dy()
-		draw.Draw(padded, padded.Bounds(), image.Black, image.Pt(0, 0), draw.Over)
-		draw.Draw(
-			padded,
-			image.Rect(diffX/2, diffY/2, diffX/2+img.Bounds().Dx(), diffY/2+img.Bounds().Dy()),
-			img,
-			image.Pt(0, 0),
-			draw.Over,
-		)
+		anim.Image = append(anim.Image, w.Render().(*image.Paletted))
+		anim.Delay = append(anim.Delay, 2)
+		anim.Disposal = append(anim.Disposal, gif.DisposalNone)
+		anim.Delay[len(anim.Delay)-2] = 300
 
-		enc.Encode(padded)
-		if p := (i + 1) * 10 / len(images); p > perc {
-			log.Printf("Encoding %d%%...", p*10)
-			perc = p
-		}
+		aoc.SaveGIF(anim, "day23-b-"+name+".gif", log)
 	}
 
-	enc.Close()
 	aoc.RenderPng(w.Render(), "day23-b-"+name+".png")
 
 	return count + 1
