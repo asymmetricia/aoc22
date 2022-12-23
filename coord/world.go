@@ -10,8 +10,14 @@ import (
 type SparseWorld map[Coord]rune
 
 func (w SparseWorld) Find(r rune) []Coord {
-	//TODO implement me
-	panic("implement me")
+	var ret []Coord
+	w.Each(func(coord Coord) bool {
+		if w.At(coord) == r {
+			ret = append(ret, coord)
+		}
+		return false
+	})
+	return ret
 }
 
 func (w SparseWorld) Copy() World {
@@ -239,7 +245,7 @@ func Load(lines []string, dense bool) World {
 	if dense {
 		w = new(DenseWorld)
 	} else {
-		w = new(SparseWorld)
+		w = &SparseWorld{}
 	}
 	for y, row := range lines {
 		for x, char := range row {
