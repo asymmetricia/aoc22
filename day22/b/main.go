@@ -7,15 +7,17 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 	"unicode"
+
+	"github.com/asymmetricia/pencil"
+	"github.com/sirupsen/logrus"
+	"golang.org/x/exp/slices"
 
 	"github.com/asymmetricia/aoc22/aoc"
 	"github.com/asymmetricia/aoc22/canvas"
 	"github.com/asymmetricia/aoc22/coord"
 	"github.com/asymmetricia/aoc22/term"
-	"github.com/asymmetricia/pencil"
-	"github.com/sirupsen/logrus"
-	"golang.org/x/exp/slices"
 )
 
 var log = logrus.StandardLogger()
@@ -105,15 +107,15 @@ func normalize(p position) position {
 }
 
 const debug = false
-const video = true
+const video = false
 
 var layout = map[side]coord.Coord{
-	Top:    coord.C(50, 0),
-	East:   coord.C(100, 0),
-	South:  coord.C(50, 50),
-	West:   coord.C(0, 100),
-	Bottom: coord.C(50, 100),
-	North:  coord.C(0, 150),
+	Top:    coord.C(50, 0),   // 50..99   & 0..49
+	East:   coord.C(100, 0),  // 100..149 & 0..49
+	South:  coord.C(50, 50),  // 50..99   & 50..99
+	West:   coord.C(0, 100),  // 0..49    & 100..149
+	Bottom: coord.C(50, 100), // 50..99   & 100..149
+	North:  coord.C(0, 150),  // 0..49    & 150..199
 }
 
 func globalFromMap(s side, c coord.Coord) coord.Coord {
@@ -157,6 +159,7 @@ func solution(name string, input []byte) int {
 			accum.Steps = accum.Steps*10 + int(i-'0')
 		}
 	}
+	stepList = append(stepList, accum)
 
 	startX := slices.Index((*maps[Top])[0], '.')
 
@@ -184,7 +187,7 @@ func solution(name string, input []byte) int {
 	}
 
 	for i, step := range stepList {
-		log.Printf("%d/%d: %s", i+1, len(stepList), pos)
+		log.Printf("%d/%d: %s, %+v", i+1, len(stepList), pos, step)
 		switch step.Turn {
 		case 'R':
 			pos.facing = pos.facing.CW(false)
@@ -199,7 +202,7 @@ func solution(name string, input []byte) int {
 
 	stepCount:
 		for j := 0; j < step.Steps; j++ {
-			if debug && (pos.pos.X < 1 || pos.pos.X > 48 || pos.pos.Y < 1 || pos.pos.Y > 48) {
+			if debug {
 				term.Clear()
 				term.MoveCursor(1, 1)
 				println(pos.side.String())
@@ -218,7 +221,11 @@ func solution(name string, input []byte) int {
 					}
 				}
 				maps[pos.side].Set(pos.pos, '.')
-				os.Stdin.Read([]byte{0})
+				if pos.pos.X < 1 || pos.pos.X > 48 || pos.pos.Y < 1 || pos.pos.Y > 48 {
+					os.Stdin.Read([]byte{0})
+				} else {
+					time.Sleep(100 * time.Millisecond)
+				}
 			}
 
 			from := pos

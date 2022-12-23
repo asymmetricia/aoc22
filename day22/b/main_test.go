@@ -5,8 +5,9 @@ import (
 	"math/rand"
 	"testing"
 
-	"github.com/asymmetricia/aoc22/coord"
 	"github.com/stretchr/testify/require"
+
+	"github.com/asymmetricia/aoc22/coord"
 )
 
 func Test_normalize(t *testing.T) {
@@ -15,17 +16,11 @@ func Test_normalize(t *testing.T) {
 		want position
 	}{
 		{
-			position{
-				side:   Top,
-				pos:    coord.C(-1, 0),
-				facing: coord.West,
-			},
-			position{
-				side:   West,
-				pos:    coord.C(0, 49),
-				facing: coord.East,
-			},
-		}, {
+			position{Top, coord.C(-1, 0), coord.West},
+			position{West, coord.C(0, 49), coord.East},
+		},
+
+		{
 			position{Top, coord.C(10, -1), coord.North},
 			position{North, coord.C(0, 10), coord.East},
 		}, {
