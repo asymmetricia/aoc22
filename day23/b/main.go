@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"golang.org/x/exp/maps"
+	"golang.org/x/exp/slices"
 	"image"
 	"image/color"
 	"image/color/palette"
@@ -9,7 +11,10 @@ import (
 	"image/gif"
 	"math/rand"
 	"os"
+	"runtime"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 	"unicode"
 
@@ -21,20 +26,32 @@ import (
 
 const video = false
 const renderGif = true
+const scaled = true
 
 var log = logrus.StandardLogger()
 
 type world struct {
-	world    *coord.SparseWorld
-	proposal map[coord.Coord][]coord.Coord
-	elves    map[coord.Coord]color.Color
-	cons     []consideration
+	world         *coord.SparseWorld
+	proposal      map[coord.Coord][]coord.Coord
+	elvesLastMove map[coord.Coord]int
+	elvesColor    map[coord.Coord]color.Color
+	cons          []consideration
 }
 
 func (w world) Render() image.Image {
 	iw := isovox.World{map[isovox.Coord]*isovox.Voxel{}}
+
+	ages := maps.Values(w.elvesLastMove)
+	slices.Sort(ages)
+
 	for _, elf := range w.world.Find('#') {
-		iw.Voxels[isovox.Coord{elf.X, elf.Y, 0}] = &isovox.Voxel{Color: w.elves[elf]}
+		var col color.Color
+		if scaled {
+			col = aoc.TolScale(ages[0], ages[len(ages)-1], w.elvesLastMove[elf])
+		} else {
+			col = w.elvesColor[elf]
+		}
+		iw.Voxels[isovox.Coord{elf.X, elf.Y, 0}] = &isovox.Voxel{Color: col}
 	}
 
 	img := iw.Render(9)
@@ -45,6 +62,18 @@ func (w world) Render() image.Image {
 	imgp := image.NewPaletted(img.Bounds(), append(aoc.TolVibrant, palette.WebSafe...))
 	draw.FloydSteinberg.Draw(imgp, img.Bounds(), img, image.Pt(0, 0))
 	return imgp
+}
+
+func (w world) Clone() world {
+	ret := world{
+		world:         &coord.SparseWorld{},
+		proposal:      maps.Clone(w.proposal),
+		elvesLastMove: maps.Clone(w.elvesLastMove),
+		elvesColor:    maps.Clone(w.elvesColor),
+		cons:          slices.Clone(w.cons),
+	}
+	maps.Copy(*ret.world, *w.world)
+	return ret
 }
 
 type consideration struct {
@@ -103,9 +132,9 @@ func solution(name string, input []byte) int {
 	log.Printf("read %d %s lines (%d unique)", len(lines), name, len(uniq))
 
 	w := &world{
-		world:    coord.Load(lines, false).(*coord.SparseWorld),
-		proposal: map[coord.Coord][]coord.Coord{},
-		elves:    map[coord.Coord]color.Color{},
+		world:         coord.Load(lines, false).(*coord.SparseWorld),
+		proposal:      map[coord.Coord][]coord.Coord{},
+		elvesLastMove: map[coord.Coord]int{},
 		cons: []consideration{
 			{[]coord.Direction{coord.North, coord.NorthEast, coord.NorthWest}, coord.North},
 			{[]coord.Direction{coord.South, coord.SouthEast, coord.SouthWest}, coord.South},
@@ -126,14 +155,15 @@ func solution(name string, input []byte) int {
 			aoc.TolVibrantOrange,
 			aoc.TolVibrantRed,
 		}
-		w.elves[elf] = cols[rand.Intn(len(cols))]
+		w.elvesColor[elf] = cols[rand.Intn(len(cols))]
+		w.elvesLastMove[elf] = 0
 	}
 
 	ec := len(w.world.Find('#'))
 
 	last := time.Now()
 	count := 0
-	var images []image.Image
+	var snapshots []world
 	round := func() bool {
 		log := log.WithField("round", count+1)
 		init := w.world.Find('#')
@@ -149,6 +179,7 @@ func solution(name string, input []byte) int {
 			return false
 		}
 
+		moved := 0
 		for to, from := range w.proposal {
 			if len(from) != 1 {
 				continue
@@ -156,37 +187,86 @@ func solution(name string, input []byte) int {
 			if w.world.At(from[0]) != '#' {
 				log.Fatalf("no elf at from pos %v", from[0])
 			}
-			w.elves[to] = w.elves[from[0]]
-			delete(w.elves, from[0])
+			w.elvesColor[to] = w.elvesColor[from[0]]
+			w.elvesLastMove[to] = count
+			delete(w.elvesLastMove, from[0])
 			w.world.Set(from[0], 0)
 			w.world.Set(to, '#')
+			moved++
 			//log.Printf("from %v to %v, %d elves", from[0], to, len(*w.world))
-		}
-		w.proposal = map[coord.Coord][]coord.Coord{}
-		count++
-
-		if name == "test" || count%5 == 0 {
-			images = append(images, w.Render())
-		}
-
-		for _, elf := range w.world.Find('#') {
-			for _, neigh := range elf.Neighbors(true) {
-				if w.world.At(neigh) == '#' {
-					return true
-				}
-			}
 		}
 
 		for time.Since(last) > time.Second {
-			log.Print(count)
+			log.Printf("round %d, %d elves moved of %d proposed moves", count+1, moved, len(w.proposal))
 			last = time.Now()
 		}
 
-		return false
+		if name == "test" || count%5 == 0 {
+			snapshots = append(snapshots, w.Clone())
+		}
+
+		if len(w.proposal) == 0 {
+			return false
+		}
+
+		w.proposal = map[coord.Coord][]coord.Coord{}
+		count++
+
+		return true
 	}
 
 	for round() {
 	}
+
+	if scaled {
+		cycles := 0
+		done := false
+		for !done {
+			cycles++
+			done = true
+			min := aoc.Min(maps.Values(w.elvesLastMove)...)
+			for i, elf := range w.elvesLastMove {
+				if elf > min {
+					done = false
+					w.elvesLastMove[i]--
+				}
+			}
+
+			if cycles%5 == 0 {
+				snapshots = append(snapshots, w.Clone())
+			}
+			if time.Since(last) >= time.Second {
+				log.Printf("cooling... %d", cycles)
+				last = time.Now()
+			}
+		}
+	}
+
+	mu := &sync.Mutex{}
+	rendering := int32(0)
+	images := make([]image.Image, len(snapshots))
+	wg := &sync.WaitGroup{}
+	ncpu := runtime.NumCPU()
+	for i, w := range snapshots {
+		for atomic.LoadInt32(&rendering) > int32(ncpu*2) {
+			time.Sleep(time.Millisecond)
+		}
+		atomic.AddInt32(&rendering, 1)
+		wg.Add(1)
+		go func(i int, w world) {
+			img := w.Render()
+			mu.Lock()
+			images[i] = img
+			if time.Since(last) >= time.Second {
+				log.Printf("rendering... %d/%d", i, len(snapshots))
+				last = time.Now()
+			}
+			atomic.AddInt32(&rendering, -1)
+			mu.Unlock()
+			wg.Done()
+		}(i, w)
+	}
+	wg.Wait()
 
 	images = append(images, w.Render())
 

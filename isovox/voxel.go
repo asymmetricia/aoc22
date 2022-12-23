@@ -3,6 +3,7 @@ package isovox
 import (
 	"image"
 	"image/color"
+	"sync"
 
 	"github.com/asymmetricia/pencil"
 )
@@ -22,10 +23,14 @@ func (v *Voxel) Sprite(size int) image.Image {
 		A: uint16(a),
 	}
 
+	spriteCacheMu.RLock()
 	sc, ok := spriteCache[size]
+	spriteCacheMu.RUnlock()
 	if !ok {
+		spriteCacheMu.Lock()
 		spriteCache[size] = map[color.RGBA64]image.Image{}
 		sc = spriteCache[size]
+		spriteCacheMu.Unlock()
 	}
 
 	if img, ok := sc[colorCK]; ok {
@@ -86,8 +91,11 @@ func (v *Voxel) Sprite(size int) image.Image {
 		pencil.Line(sprite, edgePt[0], edgePt[1], edge)
 	}
 
+	spriteCacheMu.Lock()
 	spriteCache[size][colorCK] = sprite
+	spriteCacheMu.Unlock()
 	return sprite
 }
 
+var spriteCacheMu = &sync.RWMutex{}
 var spriteCache = map[int]map[color.RGBA64]image.Image{}

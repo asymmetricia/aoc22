@@ -3,6 +3,7 @@ package aoc
 import (
 	"golang.org/x/exp/constraints"
 	"image/color"
+	"math"
 )
 
 // TolVibrant is Paul Tol's Vibrant qualitative color palette that should be
@@ -71,9 +72,9 @@ var TolSequentialSmoothRainbow = color.Palette{
 	color.RGBA{82, 26, 19, 255},
 }
 
-// TolScale returns a sequential rainbow colorfrom TolSequentialSmoothRainbow for
-// the given value, scaled to min and max. Out of bound values (< min or > max)
-// are clamped.
+// TolScale returns a sequential rainbow color from TolSequentialSmoothRainbow
+// for the given value, scaled to min and max. Out of bound values (< min or >
+// max) are clamped.
 func TolScale[K constraints.Integer | constraints.Float](min, max, val K) color.RGBA {
 	scale := max - min
 	adj := val - min
@@ -88,4 +89,11 @@ func TolScale[K constraints.Integer | constraints.Float](min, max, val K) color.
 		i = 33
 	}
 	return TolSequentialSmoothRainbow[3+i].(color.RGBA)
+}
+
+// TolScaleLog returns a sequential rainbow color from TolSequentialSmoothRainbow
+// for the given value, scaled to min and max, on a log scale. Out of bound
+// values are clamped.
+func TolScaleLog[K constraints.Integer | constraints.Float](min, max, val K) color.RGBA {
+	return TolScale(math.Log(float64(min)), math.Log(float64(max)), math.Log(float64(val)))
 }
