@@ -2,7 +2,9 @@ package main
 
 import (
 	"bytes"
+	"image"
 	"image/color"
+	"image/draw"
 	"math/rand"
 	"os"
 	"strings"
@@ -22,6 +24,14 @@ type world struct {
 	proposal map[coord.Coord][]coord.Coord
 	elves    map[coord.Coord]color.Color
 	cons     []consideration
+}
+
+func (w world) Render() image.Image {
+	iw := isovox.World{map[isovox.Coord]*isovox.Voxel{}}
+	for _, elf := range w.world.Find('#') {
+		iw.Voxels[isovox.Coord{elf.X, elf.Y, 0}] = &isovox.Voxel{Color: w.elves[elf]}
+	}
+	return iw.Render(9)
 }
 
 type consideration struct {
@@ -108,13 +118,9 @@ func solution(name string, input []byte) int {
 
 	ec := len(w.world.Find('#'))
 
-	enc, err := aoc.NewMP4Encoder("day22-b-"+name+".mp4", 60, log)
-	if err != nil {
-		log.Fatal(err)
-	}
-
 	last := time.Now()
 	count := 0
+	var images []image.Image
 	round := func() bool {
 		log := log.WithField("round", count+1)
 		init := w.world.Find('#')
@@ -154,11 +160,7 @@ func solution(name string, input []byte) int {
 		count++
 
 		if name == "test" || count%5 == 0 {
-			iw := isovox.World{map[isovox.Coord]*isovox.Voxel{}}
-			for _, elf := range w.world.Find('#') {
-				iw.Voxels[isovox.Coord{elf.X, elf.Y, 0}] = &isovox.Voxel{Color: w.elves[elf]}
-			}
-			enc.Encode(iw.Render(12))
+			images = append(images, w.Render())
 		}
 
 		for _, elf := range w.world.Find('#') {
@@ -180,7 +182,48 @@ func solution(name string, input []byte) int {
 	for round() {
 	}
 
+	enc, err := aoc.NewMP4Encoder("day23-b-"+name+".mp4", 60, log)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	rect := images[0].Bounds()
+	for _, img := range images {
+		ir := img.Bounds()
+		if ir.Dx() > rect.Dx() {
+			rect.Min.X, rect.Max.X = ir.Min.X, ir.Max.X
+		}
+		if ir.Dy() > rect.Dy() {
+			rect.Min.Y, rect.Max.Y = ir.Min.Y, ir.Max.Y
+		}
+	}
+	padded := image.NewRGBA(rect)
+
+	perc := 0
+	for i, img := range images {
+		//y := rect.Dx() * img.Bounds().Dy() / img.Bounds().Dx()
+		//resized := resize.Resize(uint(rect.Dx()), uint(y), img, resize.Bicubic)
+		//diff := rect.Dy() - y
+		diffX := rect.Dx() - img.Bounds().Dx()
+		diffY := rect.Dy() - img.Bounds().Dy()
+		draw.Draw(padded, padded.Bounds(), image.Black, image.Pt(0, 0), draw.Over)
+		draw.Draw(
+			padded,
+			image.Rect(diffX/2, diffY/2, diffX/2+img.Bounds().Dx(), diffY/2+img.Bounds().Dy()),
+			img,
+			image.Pt(0, 0),
+			draw.Over,
+		)
+
+		enc.Encode(padded)
+		if p := (i + 1) * 10 / len(images); p > perc {
+			log.Printf("Encoding %d%%...", p*10)
+			perc = p
+		}
+	}
+
 	enc.Close()
+	aoc.RenderPng(w.Render(), "day23-b-"+name+".png")
 
 	return count + 1
 }
