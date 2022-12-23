@@ -2,8 +2,6 @@ package main
 
 import (
 	"bytes"
-	"golang.org/x/exp/maps"
-	"golang.org/x/exp/slices"
 	"image"
 	"image/color"
 	"image/color/palette"
@@ -18,13 +16,16 @@ import (
 	"time"
 	"unicode"
 
+	"golang.org/x/exp/maps"
+	"golang.org/x/exp/slices"
+
 	"github.com/asymmetricia/aoc22/aoc"
 	"github.com/asymmetricia/aoc22/coord"
 	"github.com/asymmetricia/aoc22/isovox"
 	"github.com/sirupsen/logrus"
 )
 
-const video = false
+const video = true
 const renderGif = true
 const scaled = true
 
@@ -135,6 +136,7 @@ func solution(name string, input []byte) int {
 		world:         coord.Load(lines, false).(*coord.SparseWorld),
 		proposal:      map[coord.Coord][]coord.Coord{},
 		elvesLastMove: map[coord.Coord]int{},
+		elvesColor:    map[coord.Coord]color.Color{},
 		cons: []consideration{
 			{[]coord.Direction{coord.North, coord.NorthEast, coord.NorthWest}, coord.North},
 			{[]coord.Direction{coord.South, coord.SouthEast, coord.SouthWest}, coord.South},
