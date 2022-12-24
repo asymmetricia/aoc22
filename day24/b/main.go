@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"strings"
+	"time"
 	"unicode"
 
 	"github.com/sirupsen/logrus"
@@ -131,6 +132,8 @@ func solution(name string, input []byte) int {
 
 	minx, miny, maxx, maxy := initial.world.Rect()
 
+	start := time.Now()
+
 	path := aoc.Dijkstra(
 		pos{coord.C(1, 0), 0},
 		pos{coord.C(maxx-1, maxy), 99999},
@@ -203,8 +206,7 @@ func solution(name string, input []byte) int {
 		}, aoc.ConstantCost[pos], func(q *aoc.PQueue[pos], dist map[pos]int, prev map[pos]pos, current pos) {
 		})
 
-	log.Print(len(path)-1, len(path2)-1, len(path3)-1)
-	log.Print(path)
+	log.Printf("in %dms, %d / %d / %d", time.Since(start).Milliseconds(), len(path)-1, len(path2)-1, len(path3)-1)
 
 	if name == "test" && len(path)-1 != 18 {
 		panic("nope")

@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"image"
+	"image/color"
 	"image/draw"
 	"os"
 	"strconv"
@@ -17,6 +18,7 @@ import (
 	"github.com/asymmetricia/aoc22/aoc"
 	"github.com/asymmetricia/aoc22/canvas"
 	"github.com/asymmetricia/aoc22/coord"
+	"github.com/asymmetricia/aoc22/isovox"
 	"github.com/asymmetricia/aoc22/term"
 )
 
@@ -118,8 +120,154 @@ var layout = map[side]coord.Coord{
 	North:  coord.C(0, 150),  // 0..49    & 150..199
 }
 
+var recency = map[side]map[coord.Coord]int{}
+
 func globalFromMap(s side, c coord.Coord) coord.Coord {
 	return c.Plus(layout[s])
+}
+
+func render(maps map[side]*coord.DenseWorld) image.Image {
+	colors := map[rune]color.Color{
+		'N': aoc.TolVibrantMagenta,
+		'E': aoc.TolVibrantMagenta,
+		'W': aoc.TolVibrantMagenta,
+		'S': aoc.TolVibrantMagenta,
+		'#': aoc.TolVibrantCyan,
+	}
+	ivx := &isovox.World{Voxels: map[isovox.Coord]*isovox.Voxel{}}
+	for side, origin := range layout {
+		for y, row := range *maps[side] {
+			for x, cell := range row {
+				c, ok := colors[cell]
+				if _, sideRecOk := recency[side]; !ok && sideRecOk {
+					var r int
+					r, ok = recency[side][coord.C(x, y)]
+					c = aoc.TolScale(0, 1000, r)
+					if r > 1000 {
+						ok = false
+					}
+				}
+
+				y := 200 - y - origin.Y
+				ivx.Voxels[isovox.Coord{x + origin.X, y, -1}] = &isovox.Voxel{Color: aoc.TolVibrantGrey}
+				if ok {
+					ivx.Voxels[isovox.Coord{x + origin.X, y, 0}] = &isovox.Voxel{Color: c}
+					if c == aoc.TolVibrantMagenta {
+						ivx.Voxels[isovox.Coord{x + origin.X, y, 1}] = &isovox.Voxel{Color: aoc.TolVibrantMagenta}
+					}
+				}
+			}
+		}
+	}
+
+	dim := len(*maps[Top])
+
+	cube1x := -10
+	cube1y := 112
+
+	for x := 0; x < 50; x++ {
+		for y := 0; y < 50; y++ {
+			for z := 0; z < 50; z++ {
+				ivx.Voxels[isovox.Coord{cube1x + x, cube1y + y, z}] = &isovox.Voxel{Color: aoc.TolVibrantGrey}
+			}
+		}
+	}
+
+	for y, row := range *maps[Top] {
+		for x, cell := range row {
+			c, ok := colors[cell]
+			if _, sideRecOk := recency[Top]; !ok && sideRecOk {
+				var r int
+				r, ok = recency[Top][coord.C(x, y)]
+				c = aoc.TolScale(0, 1000, r)
+				if r > 1000 {
+					ok = false
+				}
+			}
+			if ok {
+				ivx.Voxels[isovox.Coord{cube1x + x, cube1y + 49 - y, dim}] = &isovox.Voxel{Color: c}
+			}
+		}
+	}
+
+	// east is on YZ plane
+	for y, row := range *maps[East] {
+		for x, cell := range row {
+			c, ok := colors[cell]
+			if _, sideRecOk := recency[East]; !ok && sideRecOk {
+				var r int
+				r, ok = recency[East][coord.C(x, y)]
+				c = aoc.TolScale(0, 1000, r)
+				if r > 1000 {
+					ok = false
+				}
+			}
+			if ok {
+				ivx.Voxels[isovox.Coord{
+					cube1x + 50,
+					cube1y + 49 - y,
+					50 - x}] = &isovox.Voxel{Color: c}
+			}
+		}
+	}
+
+	// south is on xz plane
+	for y, row := range *maps[South] {
+		y = 50 - y
+		for x, cell := range row {
+			if c, ok := colors[cell]; ok {
+				ivx.Voxels[isovox.Coord{
+					cube1x + x,
+					cube1y,
+					y}] = &isovox.Voxel{Color: c}
+			}
+		}
+	}
+
+	cube2x := -62
+	cube2y := 60
+	for y, row := range *maps[West] {
+		y = 50 - y
+		for x, cell := range row {
+			for z := 0; z < 50; z++ {
+				ivx.Voxels[isovox.Coord{
+					cube2x + x,
+					cube2y + y,
+					z}] = &isovox.Voxel{Color: aoc.TolVibrantGrey}
+			}
+			if c, ok := colors[cell]; ok {
+				ivx.Voxels[isovox.Coord{
+					cube2x + x,
+					cube2y + y,
+					dim}] = &isovox.Voxel{Color: c}
+			}
+		}
+	}
+
+	for y, row := range *maps[Bottom] {
+		for x, cell := range row {
+			if c, ok := colors[cell]; ok {
+				ivx.Voxels[isovox.Coord{
+					cube2x + 50,
+					cube2y + 50 - y,
+					49 - x}] = &isovox.Voxel{Color: c}
+			}
+		}
+	}
+
+	for y, row := range *maps[North] {
+		for x, cell := range row {
+			if c, ok := colors[cell]; ok {
+				ivx.Voxels[isovox.Coord{
+					cube2x + x,
+					cube2y,
+					49 - y,
+				}] = &isovox.Voxel{Color: c}
+			}
+		}
+	}
+
+	return ivx.Render(6)
 }
 
 func solution(name string, input []byte) int {
@@ -203,11 +351,10 @@ func solution(name string, input []byte) int {
 	stepCount:
 		for j := 0; j < step.Steps; j++ {
 			if debug {
+				f := rune(strings.ToUpper(pos.facing.String())[0])
 				term.Clear()
 				term.MoveCursor(1, 1)
 				println(pos.side.String())
-				f := rune(strings.ToUpper(pos.facing.String())[0])
-				maps[pos.side].Set(pos.pos, f)
 				for side, tl := range layout {
 					for i, line := range strings.Split(maps[side].String(), "\n") {
 						term.MoveCursor(tl.X*2+1, tl.Y+i+2)
@@ -220,7 +367,6 @@ func solution(name string, input []byte) int {
 						}
 					}
 				}
-				maps[pos.side].Set(pos.pos, '.')
 				if pos.pos.X < 1 || pos.pos.X > 48 || pos.pos.Y < 1 || pos.pos.Y > 48 {
 					os.Stdin.Read([]byte{0})
 				} else {
@@ -248,6 +394,17 @@ func solution(name string, input []byte) int {
 						log.Fatal(err)
 					}
 				}
+				maps[pos.side].Set(pos.pos, '.')
+				maps[nextpos.side].Set(nextpos.pos, rune(strings.ToUpper(nextpos.facing.String())[0]))
+				for _, recs := range recency {
+					for c, v := range recs {
+						recs[c] = v + 1
+					}
+				}
+				if _, ok := recency[nextpos.side]; !ok {
+					recency[nextpos.side] = map[coord.Coord]int{}
+				}
+				recency[nextpos.side][nextpos.pos] = 0
 				pos = nextpos
 				continue
 			case '#':
@@ -277,6 +434,11 @@ func solution(name string, input []byte) int {
 	}
 	if score <= 134060 {
 		panic("nope")
+	}
+
+	aoc.RenderPng(render(maps), "day22-b-"+name+".png")
+	for _, m := range maps {
+		m.Print()
 	}
 
 	return score
