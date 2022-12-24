@@ -22,12 +22,22 @@ func ConstantCost[K any](K, K) int {
 	return 1
 }
 
+type Equaler[Cell comparable] interface {
+	Equal(Cell) bool
+}
+
 // Dijkstra implements a generic Dijkstra's Algorithm, which is guaranteed to
 // find the shortest path from start to end, with edges given by repeated calls
 // to neighbors().
 //
 // length should return the length of any given edge. callbacks are optional,
 // used for status reporting or visualization.
+//
+// returns the path including the start Cell; or nil if there is no path.
+//
+// If Cell type implements an `(Cell) Equal(Cell) bool` method, then this is used
+// to compare reachable cells to the end state. Otherwise, simple equality is
+// used.
 func Dijkstra[Cell comparable](
 	start Cell,
 	end Cell,
@@ -53,8 +63,10 @@ func Dijkstra[Cell comparable](
 			cb(q, dist, prev, u)
 		}
 
-		if u == end {
-			break
+		if ue, ok := any(u).(Equaler[Cell]); ok && ue.Equal(end) {
+			return Path(u, prev)
+		} else if u == end {
+			return Path(u, prev)
 		}
 
 		for _, v := range neighbors(u) {
@@ -69,5 +81,6 @@ func Dijkstra[Cell comparable](
 		}
 	}
 
-	return Path(end, prev)
+	// no path
+	return nil
 }
