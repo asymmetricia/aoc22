@@ -27,7 +27,7 @@ import (
 
 const video = true
 const renderGif = true
-const scaled = true
+const scaled = false
 
 var log = logrus.StandardLogger()
 
@@ -312,6 +312,10 @@ func solution(name string, input []byte) int {
 				perc = p
 			}
 		}
+
+    for i := 0; i < 180; i++ {
+      enc.Encode(padded)
+    }
 
 		enc.Close()
 	}
