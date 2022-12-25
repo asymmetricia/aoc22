@@ -4,19 +4,19 @@ import (
 	"bytes"
 	"image"
 	"image/color"
-	"image/draw"
 	"os"
+	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 	"unicode"
 
-	"github.com/asymmetricia/pencil"
 	"github.com/sirupsen/logrus"
+	"golang.org/x/exp/maps"
 	"golang.org/x/exp/slices"
 
 	"github.com/asymmetricia/aoc22/aoc"
-	"github.com/asymmetricia/aoc22/canvas"
 	"github.com/asymmetricia/aoc22/coord"
 	"github.com/asymmetricia/aoc22/isovox"
 	"github.com/asymmetricia/aoc22/term"
@@ -109,7 +109,7 @@ func normalize(p position) position {
 }
 
 const debug = false
-const video = false
+const video = true
 
 var layout = map[side]coord.Coord{
 	Top:    coord.C(50, 0),   // 50..99   & 0..49
@@ -120,13 +120,11 @@ var layout = map[side]coord.Coord{
 	North:  coord.C(0, 150),  // 0..49    & 150..199
 }
 
-var recency = map[side]map[coord.Coord]int{}
-
 func globalFromMap(s side, c coord.Coord) coord.Coord {
 	return c.Plus(layout[s])
 }
 
-func render(maps map[side]*coord.DenseWorld) image.Image {
+func render(state State) image.Image {
 	colors := map[rune]color.Color{
 		'N': aoc.TolVibrantMagenta,
 		'E': aoc.TolVibrantMagenta,
@@ -136,12 +134,12 @@ func render(maps map[side]*coord.DenseWorld) image.Image {
 	}
 	ivx := &isovox.World{Voxels: map[isovox.Coord]*isovox.Voxel{}}
 	for side, origin := range layout {
-		for y, row := range *maps[side] {
+		for y, row := range *state.maps[side] {
 			for x, cell := range row {
 				c, ok := colors[cell]
-				if _, sideRecOk := recency[side]; !ok && sideRecOk {
+				if _, sideRecOk := state.recency[side]; !ok && sideRecOk {
 					var r int
-					r, ok = recency[side][coord.C(x, y)]
+					r, ok = state.recency[side][coord.C(x, y)]
 					c = aoc.TolScale(0, 1000, r)
 					if r > 1000 {
 						ok = false
@@ -160,114 +158,101 @@ func render(maps map[side]*coord.DenseWorld) image.Image {
 		}
 	}
 
-	dim := len(*maps[Top])
+	dim := len(*state.maps[Top])
 
 	cube1x := -10
 	cube1y := 112
+	cube2x := -62
+	cube2y := 60
 
 	for x := 0; x < 50; x++ {
 		for y := 0; y < 50; y++ {
 			for z := 0; z < 50; z++ {
 				ivx.Voxels[isovox.Coord{cube1x + x, cube1y + y, z}] = &isovox.Voxel{Color: aoc.TolVibrantGrey}
+				ivx.Voxels[isovox.Coord{cube2x + x, cube2y + y, z}] = &isovox.Voxel{Color: aoc.TolVibrantGrey}
 			}
 		}
 	}
 
-	for y, row := range *maps[Top] {
-		for x, cell := range row {
-			c, ok := colors[cell]
-			if _, sideRecOk := recency[Top]; !ok && sideRecOk {
-				var r int
-				r, ok = recency[Top][coord.C(x, y)]
-				c = aoc.TolScale(0, 1000, r)
-				if r > 1000 {
-					ok = false
+	type transform struct {
+		x, y, z func(x, y int) int
+	}
+
+	for side, transform := range map[side]transform{
+		Top: {
+			x: func(x, y int) int { return cube1x + x },
+			y: func(x, y int) int { return cube1y + 49 - y },
+			z: func(x, y int) int { return dim },
+		},
+		East: {
+			x: func(x, y int) int { return cube1x + 50 },
+			y: func(x, y int) int { return cube1y + 49 - y },
+			z: func(x, y int) int { return 50 - x },
+		},
+		South: {
+			x: func(x, y int) int { return cube1x + x },
+			y: func(x, y int) int { return cube1y - 1 },
+			z: func(x, y int) int { return 49 - y },
+		},
+		West: {
+			x: func(x, y int) int { return cube2x + x },
+			y: func(x, y int) int { return cube2y + 49 - y },
+			z: func(x, y int) int { return 50 },
+		},
+		Bottom: {
+			x: func(x, y int) int { return cube2x + 50 },
+			y: func(x, y int) int { return cube2y + 49 - y },
+			z: func(x, y int) int { return 49 - x },
+		},
+		North: {
+			x: func(x, y int) int { return cube2x + x },
+			y: func(x, y int) int { return cube2y - 1 },
+			z: func(x, y int) int { return 49 - y },
+		},
+	} {
+		for y, row := range *state.maps[side] {
+			for x, cell := range row {
+				c, ok := colors[cell]
+				if _, sideRecOk := state.recency[side]; !ok && sideRecOk {
+					var r int
+					r, ok = state.recency[side][coord.C(x, y)]
+					c = aoc.TolScale(0, 1000, r)
+					if r > 1000 {
+						ok = false
+					}
 				}
-			}
-			if ok {
-				ivx.Voxels[isovox.Coord{cube1x + x, cube1y + 49 - y, dim}] = &isovox.Voxel{Color: c}
-			}
-		}
-	}
-
-	// east is on YZ plane
-	for y, row := range *maps[East] {
-		for x, cell := range row {
-			c, ok := colors[cell]
-			if _, sideRecOk := recency[East]; !ok && sideRecOk {
-				var r int
-				r, ok = recency[East][coord.C(x, y)]
-				c = aoc.TolScale(0, 1000, r)
-				if r > 1000 {
-					ok = false
+				if ok {
+					ivx.Voxels[isovox.Coord{
+						transform.x(x, y),
+						transform.y(x, y),
+						transform.z(x, y),
+					}] = &isovox.Voxel{Color: c}
 				}
-			}
-			if ok {
-				ivx.Voxels[isovox.Coord{
-					cube1x + 50,
-					cube1y + 49 - y,
-					50 - x}] = &isovox.Voxel{Color: c}
-			}
-		}
-	}
-
-	// south is on xz plane
-	for y, row := range *maps[South] {
-		y = 50 - y
-		for x, cell := range row {
-			if c, ok := colors[cell]; ok {
-				ivx.Voxels[isovox.Coord{
-					cube1x + x,
-					cube1y,
-					y}] = &isovox.Voxel{Color: c}
-			}
-		}
-	}
-
-	cube2x := -62
-	cube2y := 60
-	for y, row := range *maps[West] {
-		y = 50 - y
-		for x, cell := range row {
-			for z := 0; z < 50; z++ {
-				ivx.Voxels[isovox.Coord{
-					cube2x + x,
-					cube2y + y,
-					z}] = &isovox.Voxel{Color: aoc.TolVibrantGrey}
-			}
-			if c, ok := colors[cell]; ok {
-				ivx.Voxels[isovox.Coord{
-					cube2x + x,
-					cube2y + y,
-					dim}] = &isovox.Voxel{Color: c}
-			}
-		}
-	}
-
-	for y, row := range *maps[Bottom] {
-		for x, cell := range row {
-			if c, ok := colors[cell]; ok {
-				ivx.Voxels[isovox.Coord{
-					cube2x + 50,
-					cube2y + 50 - y,
-					49 - x}] = &isovox.Voxel{Color: c}
-			}
-		}
-	}
-
-	for y, row := range *maps[North] {
-		for x, cell := range row {
-			if c, ok := colors[cell]; ok {
-				ivx.Voxels[isovox.Coord{
-					cube2x + x,
-					cube2y,
-					49 - y,
-				}] = &isovox.Voxel{Color: c}
 			}
 		}
 	}
 
 	return ivx.Render(6)
+}
+
+type State struct {
+	maps    map[side]*coord.DenseWorld
+	recency map[side]map[coord.Coord]int
+}
+
+func (s State) Clone() State {
+	ret := State{
+		maps:    map[side]*coord.DenseWorld{},
+		recency: map[side]map[coord.Coord]int{}}
+
+	for side, sidemap := range s.maps {
+		ret.maps[side] = sidemap.Crop()
+	}
+
+	for side, rec := range s.recency {
+		ret.recency[side] = maps.Clone(rec)
+	}
+	return ret
 }
 
 func solution(name string, input []byte) int {
@@ -283,14 +268,16 @@ func solution(name string, input []byte) int {
 
 	dim := 50
 
-	maps := map[side]*coord.DenseWorld{}
+	initial := State{
+		maps: map[side]*coord.DenseWorld{},
+	}
 
 	for side, tl := range layout {
 		var sidelines []string
 		for _, line := range lines[tl.Y : tl.Y+dim] {
 			sidelines = append(sidelines, line[tl.X:tl.X+dim])
 		}
-		maps[side] = coord.Load(sidelines, true).(*coord.DenseWorld)
+		initial.maps[side] = coord.Load(sidelines, true).(*coord.DenseWorld)
 	}
 
 	var steps = lines[201]
@@ -309,7 +296,7 @@ func solution(name string, input []byte) int {
 	}
 	stepList = append(stepList, accum)
 
-	startX := slices.Index((*maps[Top])[0], '.')
+	startX := slices.Index((*initial.maps[Top])[0], '.')
 
 	pos := position{
 		side:   Top,
@@ -317,24 +304,14 @@ func solution(name string, input []byte) int {
 		facing: coord.East,
 	}
 
-	var last draw.Image
-	var enc *aoc.MP4Encoder
-
-	if video {
-		frame := canvas.Canvas{}
-		frame.PrintAt(0, 0, strings.Join(lines[:200], "\n"), aoc.TolVibrantGrey)
-		last = frame.Render()
-		var err error
-		enc, err = aoc.NewMP4Encoder("out.mp4", 60, log)
-		if err != nil {
-			log.Fatal(err)
-		}
-		if err := enc.Encode(last); err != nil {
-			log.Fatal(err)
-		}
-	}
-
+	state := initial.Clone()
+	var states []State
 	for i, step := range stepList {
+		if i%2 == 0 || i == len(stepList)-1 {
+			states = append(states, state)
+			state = state.Clone()
+		}
+
 		log.Printf("%d/%d: %s, %+v", i+1, len(stepList), pos, step)
 		switch step.Turn {
 		case 'R':
@@ -356,7 +333,7 @@ func solution(name string, input []byte) int {
 				term.MoveCursor(1, 1)
 				println(pos.side.String())
 				for side, tl := range layout {
-					for i, line := range strings.Split(maps[side].String(), "\n") {
+					for i, line := range strings.Split(state.maps[side].String(), "\n") {
 						term.MoveCursor(tl.X*2+1, tl.Y+i+2)
 						for _, r := range line {
 							if r == f {
@@ -374,37 +351,25 @@ func solution(name string, input []byte) int {
 				}
 			}
 
-			from := pos
 			nextpos := normalize(position{
 				side:   pos.side,
 				pos:    pos.pos.Move(pos.facing),
 				facing: pos.facing,
 			})
 
-			switch maps[nextpos.side].At(nextpos.pos) {
+			switch state.maps[nextpos.side].At(nextpos.pos) {
 			case '.':
-				if video {
-					fg := globalFromMap(from.side, from.pos)
-					tg := globalFromMap(nextpos.side, nextpos.pos)
-					pencil.Line(last,
-						image.Pt(fg.X*aoc.GlyphWidth+aoc.GlyphWidth/2, fg.Y*aoc.LineHeight+aoc.LineHeight/2),
-						image.Pt(tg.X*aoc.GlyphWidth+aoc.GlyphWidth/2, tg.Y*aoc.LineHeight+aoc.LineHeight/2),
-						aoc.TolVibrantMagenta)
-					if err := enc.Encode(last); err != nil {
-						log.Fatal(err)
-					}
-				}
-				maps[pos.side].Set(pos.pos, '.')
-				maps[nextpos.side].Set(nextpos.pos, rune(strings.ToUpper(nextpos.facing.String())[0]))
-				for _, recs := range recency {
+				state.maps[pos.side].Set(pos.pos, '.')
+				state.maps[nextpos.side].Set(nextpos.pos, rune(strings.ToUpper(nextpos.facing.String())[0]))
+				for _, recs := range state.recency {
 					for c, v := range recs {
 						recs[c] = v + 1
 					}
 				}
-				if _, ok := recency[nextpos.side]; !ok {
-					recency[nextpos.side] = map[coord.Coord]int{}
+				if _, ok := state.recency[nextpos.side]; !ok {
+					state.recency[nextpos.side] = map[coord.Coord]int{}
 				}
-				recency[nextpos.side][nextpos.pos] = 0
+				state.recency[nextpos.side][nextpos.pos] = 0
 				pos = nextpos
 				continue
 			case '#':
@@ -415,8 +380,69 @@ func solution(name string, input []byte) int {
 		}
 	}
 
+	states = append(states, state)
+
 	if video {
-		enc.Close()
+		enc, err := aoc.NewMP4Encoder("day22-b-"+name+".mp4", 60, log)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		var images = make([]image.Image, len(states))
+		wg := &sync.WaitGroup{}
+		type req struct {
+			i int
+			s State
+		}
+		type res struct {
+			i   int
+			img image.Image
+		}
+
+		reqCh := make(chan req, len(states))
+		for i, s := range states {
+			reqCh <- req{i, s}
+		}
+		close(reqCh)
+
+		resCh := make(chan res)
+
+		log.Print("rendering states...")
+		for i := 0; i < runtime.NumCPU(); i++ {
+			wg.Add(1)
+			go func(req <-chan req, resCh chan<- res) {
+				defer wg.Done()
+				for s := range req {
+					resCh <- res{s.i, render(s.s)}
+				}
+			}(reqCh, resCh)
+		}
+		go func() {
+			wg.Wait()
+			close(resCh)
+		}()
+
+		last := time.Now()
+		next := 0
+		for res := range resCh {
+			images[res.i] = res.img
+			for next < len(images) && images[next] != nil {
+				if err := enc.Encode(images[next]); err != nil {
+					log.Fatal(err)
+				}
+				images[next] = nil
+				next++
+
+				if time.Since(last) > time.Second {
+					last = time.Now()
+					log.Printf("rendering... (%d/%d)", len(states)-len(reqCh), len(states))
+				}
+			}
+		}
+
+		if err := enc.Close(); err != nil {
+			log.Fatal(err)
+		}
 	}
 
 	value := map[coord.Direction]int{
@@ -436,8 +462,8 @@ func solution(name string, input []byte) int {
 		panic("nope")
 	}
 
-	aoc.RenderPng(render(maps), "day22-b-"+name+".png")
-	for _, m := range maps {
+	aoc.RenderPng(render(state), "day22-b-"+name+".png")
+	for _, m := range state.maps {
 		m.Print()
 	}
 
