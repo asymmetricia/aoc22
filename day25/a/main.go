@@ -13,6 +13,43 @@ import (
 
 var log = logrus.StandardLogger()
 
+func ToSnafu(i int) string {
+	if i == 0 {
+		return ""
+	}
+
+	switch i % 5 {
+	case 0:
+		return ToSnafu(i/5) + "0"
+	case 1:
+		return ToSnafu(i/5) + "1"
+	case 2:
+		return ToSnafu(i/5) + "2"
+	case 3:
+		return ToSnafu(i/5+1) + "="
+	default:
+		return ToSnafu(i/5+1) + "-"
+	}
+}
+
+func ParseSnafu(s string) int {
+	var ret int
+	for i, c := range s {
+		n := map[rune]int{
+			'2': 2,
+			'1': 1,
+			'0': 0,
+			'-': -1,
+			'=': -2,
+		}[c]
+		for j := 0; j < len(s)-i-1; j++ {
+			n *= 5
+		}
+		ret += n
+	}
+	return ret
+}
+
 func solution(name string, input []byte) int {
 	// trim trailing space only
 	input = bytes.Replace(input, []byte("\r"), []byte(""), -1)
@@ -24,10 +61,12 @@ func solution(name string, input []byte) int {
 	}
 	log.Printf("read %d %s lines (%d unique)", len(lines), name, len(uniq))
 
-	//for _, line := range lines {
-	//	//fields := strings.Fields(line)
-	//}
+	sum := 0
+	for _, line := range lines {
+		sum += ParseSnafu(line)
+	}
 
+	log.Print(ToSnafu(sum))
 	return -1
 }
 
